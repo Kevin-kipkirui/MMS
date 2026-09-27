@@ -1,0 +1,12 @@
+{
+  "name": "mms-root",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix ./mms run dev",
+    "start": "npm --prefix ./mms run dev"
+  },
+  "dependencies": {
+    "react-is": "^19.3.0",
+    "recharts": "^3.10.1"
+  }
+}

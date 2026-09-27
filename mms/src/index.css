@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+:root {
+  font-family: "IBM Plex Sans", Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  line-height: 1.5;
+  font-weight: 400;
+  color: #e5e7eb;
+  background: #0f172a;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html, body, #root {
+  margin: 0;
+  min-height: 100%;
+  min-width: 100%;
+  background: #0f172a;
+}
+
+body {
+  min-height: 100vh;
+}
+
+/* Use a dedicated, official monospace for numeric/text that needs tabular figures */
+.font-mono,
+.numeric,
+.num {
+  /* Use the same official sans for numeric glyphs but request tabular figures
+     so digits align while keeping plain, undecorated zero glyphs. */
+  font-family: "IBM Plex Sans", Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans";
+  font-variant-numeric: tabular-nums;
+  -webkit-font-feature-settings: "tnum" 1, "lnum" 1;
+  -moz-font-feature-settings: "tnum" 1, "lnum" 1;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
