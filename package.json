@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "npm --prefix ./mms run dev",
+    "build": "npm --prefix ./mms run build",
     "start": "npm --prefix ./mms run dev"
   },
   "dependencies": {
