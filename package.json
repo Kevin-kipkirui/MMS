@@ -2,9 +2,10 @@
   "name": "mms-root",
   "private": true,
   "scripts": {
-    "dev": "npm --prefix ./mms run dev",
+    "preinstall": "npm --prefix ./mms install --no-fund --no-audit",
+    "dev": "npm --prefix ./mms run dev -- --host 0.0.0.0",
     "build": "npm --prefix ./mms run build",
-    "start": "npm --prefix ./mms run dev"
+    "start": "npm --prefix ./mms run preview -- --host 0.0.0.0"
   },
   "dependencies": {
     "react-is": "^19.3.0",
