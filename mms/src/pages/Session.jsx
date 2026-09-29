@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import Login from "./Login";
+import { supabase } from "../lib/supabase";
+import { pullAll, pushSettings, pushDay, pushHistory } from "../lib/sync";
 
 /**
  * <Session />
@@ -441,30 +443,24 @@ function EditLimitModal({ mode, maxLoss, currency, tradeLimit, onClose, onSaveLo
 
 // ---------- component ----------
 export default function Session({ onOpenSummit } = {}) {
-  const AUTH_KEY = "mms_session_unlocked";
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return window.sessionStorage.getItem(AUTH_KEY) === "true";
-    } catch {
-      return false;
-    }
-  });
+  const [authUser, setAuthUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const syncAuth = () => {
-      try {
-        setIsAuthenticated(window.sessionStorage.getItem(AUTH_KEY) === "true");
-      } catch {
-        setIsAuthenticated(false);
-      }
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      setAuthUser(data.session ? data.session.user : null);
+      setAuthReady(true);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUser(session ? session.user : null);
+      setAuthReady(true);
+    });
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
     };
-
-    syncAuth();
-    window.addEventListener("storage", syncAuth);
-    return () => window.removeEventListener("storage", syncAuth);
   }, []);
 
   const dayKey = "td_day_" + todayKey();
@@ -515,6 +511,118 @@ export default function Session({ onOpenSummit } = {}) {
   const lastAutoScroll = useRef(0);
   const prevNowId = useRef(null);
   const fontLinkAdded = useRef(false);
+
+  // ---------- Supabase sync ----------
+  const userId = authUser ? authUser.id : null;
+  const [hydrated, setHydrated] = useState(false);
+  const [syncState, setSyncState] = useState("idle"); // idle | syncing | synced | offline
+  const [retryTick, setRetryTick] = useState(0);
+  const pushedHist = useRef({});
+  const dayDate = dayKey.slice("td_day_".length);
+
+  // retry when the connection comes back
+  useEffect(() => {
+    const onOnline = () => setRetryTick((t) => t + 1);
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, []);
+
+  // 1) On sign-in: pull from Supabase. Anything that exists only on this device is kept and uploaded.
+  useEffect(() => {
+    if (!userId) {
+      if (hydrated) setHydrated(false);
+      pushedHist.current = {};
+      return;
+    }
+    if (hydrated) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setSyncState("syncing");
+        const remote = await pullAll(userId, dayDate);
+        if (cancelled) return;
+
+        if (remote.settings) {
+          const s = remote.settings;
+          if (s.maxLoss != null) setMaxLoss(s.maxLoss);
+          if (s.tradeLimit != null) setTradeLimit(s.tradeLimit);
+          if (s.currency != null) setCurrency(s.currency);
+          if (s.monthlyTarget != null) setMonthlyTarget(s.monthlyTarget);
+        }
+
+        if (remote.day) {
+          setDay({ checks: {}, energy: null, pnl: [], news: [], ...remote.day });
+        }
+
+        const remoteDates = new Set(remote.history.map((h) => h.date));
+        const localOnly = readLS("td_history", []).filter((h) => !remoteDates.has(h.date));
+        const merged = pruneHistory([...remote.history, ...localOnly]).sort((a, b) =>
+          a.date < b.date ? -1 : a.date > b.date ? 1 : 0
+        );
+        const map = {};
+        remote.history.forEach((h) => { map[h.date] = JSON.stringify(h); });
+        pushedHist.current = map;
+        setHistory(merged);
+
+        setHydrated(true);
+        setSyncState("synced");
+      } catch (e) {
+        if (!cancelled) setSyncState("offline");
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, hydrated, retryTick]);
+
+  // 2) Push settings when they change
+  useEffect(() => {
+    if (!userId || !hydrated) return;
+    const t = setTimeout(() => {
+      setSyncState("syncing");
+      pushSettings(userId, { maxLoss, tradeLimit, currency, monthlyTarget })
+        .then(() => setSyncState("synced"))
+        .catch(() => setSyncState("offline"));
+    }, 800);
+    return () => clearTimeout(t);
+  }, [userId, hydrated, retryTick, maxLoss, tradeLimit, currency, monthlyTarget]);
+
+  // 3) Push today's session when it changes
+  useEffect(() => {
+    if (!userId || !hydrated) return;
+    const hasData =
+      day.pnl.length > 0 || day.news.length > 0 || day.energy !== null || Object.values(day.checks).some(Boolean);
+    if (!hasData) return;
+    const t = setTimeout(() => {
+      setSyncState("syncing");
+      pushDay(userId, dayDate, day)
+        .then(() => setSyncState("synced"))
+        .catch(() => setSyncState("offline"));
+    }, 800);
+    return () => clearTimeout(t);
+  }, [userId, hydrated, retryTick, day, dayDate]);
+
+  // 4) Push only the history entries that changed
+  useEffect(() => {
+    if (!userId || !hydrated) return;
+    const changed = history.filter((h) => pushedHist.current[h.date] !== JSON.stringify(h));
+    if (!changed.length) return;
+    const t = setTimeout(() => {
+      setSyncState("syncing");
+      pushHistory(userId, changed)
+        .then(() => {
+          changed.forEach((h) => { pushedHist.current[h.date] = JSON.stringify(h); });
+          setSyncState("synced");
+        })
+        .catch(() => setSyncState("offline"));
+    }, 500);
+    return () => clearTimeout(t);
+  }, [userId, hydrated, retryTick, history]);
+
+  const syncLabel =
+    syncState === "synced" ? "Synced to your account."
+      : syncState === "syncing" ? "Syncing…"
+      : syncState === "offline" ? "Offline. Changes will sync when you reconnect."
+      : "Connecting…";
 
   // inject Google Fonts once
   useEffect(() => {
@@ -749,13 +857,12 @@ export default function Session({ onOpenSummit } = {}) {
     setDay((d) => ({ ...d, checks: { ...d.checks, [id]: !d.checks[id] } }));
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     try {
-      window.sessionStorage.removeItem(AUTH_KEY);
+      await supabase.auth.signOut();
     } catch (e) {
-      /* sessionStorage unavailable — still log out in memory */
+      /* network hiccup: the auth listener still clears the local session */
     }
-    setIsAuthenticated(false);
   };
 
   const handleGoToSummit = () => {
@@ -884,8 +991,21 @@ export default function Session({ onOpenSummit } = {}) {
   );
 
   // All hooks have run by this point — safe to branch on auth state now.
-  if (!isAuthenticated) {
-    return <Login onSuccess={() => setIsAuthenticated(true)} storageKey={AUTH_KEY} />;
+  if (!authReady) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "#070b12",
+        }}
+        aria-busy="true"
+      />
+    );
+  }
+
+  if (!authUser) {
+    return <Login onSuccess={() => setAuthUser({})} />;
   }
 
   // ---------- render helpers ----------
@@ -1357,7 +1477,7 @@ export default function Session({ onOpenSummit } = {}) {
         </div>
 
         <footer>
-          Everything here stays on this device, for you only. <button className="resetlink" onClick={resetToday}>Reset today</button>
+          {syncLabel} <button className="resetlink" onClick={resetToday}>Reset today</button>
         </footer>
       </div>
 
