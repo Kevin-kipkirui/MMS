@@ -44,35 +44,27 @@ function useLocalStorageState(key, initialValue) {
 const M = (h, m) => h * 60 + m;
 
 const SCHEDULE = {
-  morning: [
-    { id: "wake", t: "06:00", label: "Wake up", desc: "Same time every day — irregular sleep is where afternoon burnout starts.", type: "prep", start: M(6, 0), end: M(6, 0) },
-    { id: "noscreen", t: "06:00–06:45", label: "No phone, no charts", desc: "Let the brain wake up before it starts problem-solving.", type: "prep", start: M(6, 0), end: M(6, 45) },
-    { id: "move", t: "06:45–07:15", label: "Light movement", desc: "Stretch or walk. Raises baseline energy for the whole day.", type: "prep", start: M(6, 45), end: M(7, 15) },
-    { id: "eat1", t: "07:15–07:45", label: "Breakfast", desc: "Protein + slow carbs — avoids the mid-morning crash right as trading starts.", type: "prep", start: M(7, 15), end: M(7, 45) },
-    { id: "off", t: "07:45–10:00", label: "Personal time", desc: "Mind stays off markets completely.", type: "rest", start: M(7, 45), end: M(10, 0) },
-    { id: "review", t: "10:00–10:30", label: "Review yesterday's log", desc: "What worked, what didn't, what to not repeat.", type: "prep", start: M(10, 0), end: M(10, 30) },
-    { id: "prepsetups", t: "10:30–11:00", label: "Mark levels & set limits", desc: "Set today's loss limit and trade cap now — while calm.", type: "prep", start: M(10, 30), end: M(11, 0) },
+  prep: [
+    { id: "review", t: "10:30–10:45", label: "📓 Previous Day Review", desc: "Yesterday's trades, screenshots, mistakes, wins, P&L.", type: "prep", start: M(10, 30), end: M(10, 45) },
+    { id: "premarket", t: "10:45–11:00", label: "🧭 Pre-Market Preparation", desc: "HTF bias, key levels, liquidity, important zones, market conditions. Set today's loss limit and trade cap now, while calm.", type: "prep", start: M(10, 45), end: M(11, 0) },
   ],
-  trading: [
-    { id: "p1", t: "11:00–13:00", label: "Primary session", desc: "Best focus of the day. Take your best setups.", type: "trade", start: M(11, 0), end: M(13, 0) },
-    { id: "mb", t: "13:00–13:10", label: "Micro-break", desc: "Stand, water, eyes fully off the screen.", type: "rest", start: M(13, 0), end: M(13, 10) },
-    { id: "p1b", t: "13:10–14:00", label: "Continue or watch only", desc: "Only keep going if setups are genuinely strong.", type: "trade", start: M(13, 10), end: M(14, 0) },
-    { id: "lunch", t: "14:00–15:00", label: "Full break", desc: "Lunch away from the desk. Zero charts, zero market talk.", type: "rest", start: M(14, 0), end: M(15, 0) },
-    { id: "p2", t: "15:00–16:30", label: "Secondary session", desc: "Moderate focus. Second wind, not first.", type: "trade", start: M(15, 0), end: M(16, 30) },
-    { id: "checkin", t: "16:30–16:40", label: "Energy check-in", desc: "Score it below — it decides the next block.", type: "trade", start: M(16, 30), end: M(16, 40) },
-    { id: "aplus", t: "16:40–17:00", label: "A+ setups only", desc: "Or just manage what's already open. No new analysis.", type: "trade", start: M(16, 40), end: M(17, 0) },
-    { id: "hardstop", t: "17:00", label: "Hard stop", desc: 'No exceptions. No "one more trade."', type: "stop", start: M(17, 0), end: M(17, 0) },
+  session: [
+    { id: "t1", t: "11:00–12:15", label: "🎯 Trading Block 1", desc: "Execute your plan. Take only your best setups.", type: "trade", start: M(11, 0), end: M(12, 15) },
+    { id: "b1", t: "12:15–12:30", label: "☕ Break", desc: "Step away from the screen. Water, stretch, reset.", type: "rest", start: M(12, 15), end: M(12, 30) },
+    { id: "t2", t: "12:30–13:30", label: "🎯 Trading Block 2", desc: "Stay patient and stick to the plan.", type: "trade", start: M(12, 30), end: M(13, 30) },
+    { id: "lunch", t: "13:30–14:00", label: "🍽️ Lunch + Break", desc: "Eat away from the desk. No charts.", type: "rest", start: M(13, 30), end: M(14, 0) },
+    { id: "t3", t: "14:00–15:00", label: "🎯 Trading Block 3", desc: "Fresh eyes after lunch. Same rules, same discipline.", type: "trade", start: M(14, 0), end: M(15, 0) },
+    { id: "b2", t: "15:00–15:15", label: "🚶 Break", desc: "Walk, breathe, eyes off the screen.", type: "rest", start: M(15, 0), end: M(15, 15) },
+    { id: "t4", t: "15:15–16:15", label: "🎯 Trading Block 4", desc: "Stay selective. Quality over quantity.", type: "trade", start: M(15, 15), end: M(16, 15) },
+    { id: "b3", t: "16:15–16:30", label: "☕ Break", desc: "Short reset before the final block.", type: "rest", start: M(16, 15), end: M(16, 30) },
+    { id: "tfinal", t: "16:30–16:50", label: "🎯 Final Trading Block", desc: "Last window. A+ setups only, or just manage what's open.", type: "trade", start: M(16, 30), end: M(16, 50) },
   ],
-  evening: [
-    { id: "logtime", t: "17:00–17:15", label: "Log the day", desc: "Fill in the log below while it's fresh.", type: "prep", start: M(17, 0), end: M(17, 15) },
-    { id: "disconnect", t: "17:15–18:00", label: "Total disconnect", desc: 'No checking charts "just to see."', type: "rest", start: M(17, 15), end: M(18, 0) },
-    { id: "personal", t: "18:00–21:30", label: "Real recovery", desc: "Hobby, people, movement — whatever actually refills you.", type: "rest", start: M(18, 0), end: M(21, 30) },
-    { id: "screensoff", t: "21:30", label: "Screens off", desc: "Protects sleep, which protects tomorrow's focus.", type: "prep", start: M(21, 30), end: M(21, 30) },
-    { id: "bed", t: "22:00", label: "Fixed bedtime", desc: "Same time nightly. Consistency compounds.", type: "prep", start: M(22, 0), end: M(22, 0) },
+  close: [
+    { id: "eod", t: "16:50–17:00", label: "📊 End-of-Day Review", desc: "P&L, executions, screenshots, lessons, journal.", type: "prep", start: M(16, 50), end: M(17, 0) },
   ],
 };
 
-const ALL_BLOCKS = [...SCHEDULE.morning, ...SCHEDULE.trading, ...SCHEDULE.evening];
+const ALL_BLOCKS = [...SCHEDULE.prep, ...SCHEDULE.session, ...SCHEDULE.close];
 const IMPACT_RULE = { high: "Stand aside", med: "Half size", low: "Trade as normal" };
 
 function toMin(hhmm) {
@@ -543,7 +535,7 @@ export default function Session({ onOpenSummit } = {}) {
       return {
         limit: false,
         head: "In session",
-        sub: `${Math.floor(minsLeft / 60)}h ${minsLeft % 60}m until hard stop. Net ${fmt(netPnl)}, ${money(
+        sub: `${Math.floor(minsLeft / 60)}h ${minsLeft % 60}m until session close. Net ${fmt(netPnl)}, ${money(
           maxLoss + Math.min(0, netPnl)
         )} of room left.`,
       };
@@ -763,7 +755,7 @@ export default function Session({ onOpenSummit } = {}) {
     energy: day.energy,
     news: day.news.map((n) => ({ time: n.time, title: n.title, impact: n.impact })),
     note: logForm.note.trim(),
-    stoppedOnTime: !!day.checks["hardstop"],
+    stoppedOnTime: !!day.checks["eod"],
   });
 
   const commitEntry = (entry) => {
@@ -1051,8 +1043,8 @@ export default function Session({ onOpenSummit } = {}) {
               block={currentBlock}
               done={!!day.checks[currentBlock.id]}
               onToggle={() => toggleCheck(currentBlock.id)}
-              isTrade={currentBlock.type === "trade" && currentBlock.id !== "checkin"}
-              isEnergy={currentBlock.id === "checkin"}
+              isTrade={currentBlock.type === "trade"}
+              isEnergy={currentBlock.id === "eod"}
               energy={day.energy}
               onEnergy={(i) => setDay((d) => ({ ...d, energy: i }))}
               pnlInputRef={pnlInputRef}
@@ -1070,14 +1062,17 @@ export default function Session({ onOpenSummit } = {}) {
           )
         ) : (
           <>
-            <h2 className="section">Morning<span className="sub">before the market exists</span></h2>
-            <div>{SCHEDULE.morning.map(renderBlock)}</div>
+            <h2 className="section">Preparation<span className="sub">10:30 – 11:00</span></h2>
+            <div>{SCHEDULE.prep.map(renderBlock)}</div>
 
-            <h2 className="section">The window<span className="sub">11:00 – 17:00 EAT</span></h2>
-            <div>{SCHEDULE.trading.map(renderBlock)}</div>
+            <h2 className="section">The window<span className="sub">11:00 – 16:50 EAT</span></h2>
+            <div>{SCHEDULE.session.map(renderBlock)}</div>
+
+            <h2 className="section">Wrap-up<span className="sub">16:50 – 17:00</span></h2>
+            <div>{SCHEDULE.close.map(renderBlock)}</div>
 
             <div className="energybar">
-              <div className="lbl">Energy check-in (16:30) — be honest, it decides your last block</div>
+              <div className="lbl">Energy check-in — be honest about how the day felt</div>
               <div className="energyrow">
                 {[1, 2, 3, 4, 5].map((i) => (
                   <button key={i} className={day.energy === i ? "sel" : ""} onClick={() => setDay((d) => ({ ...d, energy: i }))}>
@@ -1086,9 +1081,6 @@ export default function Session({ onOpenSummit } = {}) {
                 ))}
               </div>
             </div>
-
-            <h2 className="section">Evening<span className="sub">this is where tomorrow gets built</span></h2>
-            <div>{SCHEDULE.evening.map(renderBlock)}</div>
           </>
         )}
 
