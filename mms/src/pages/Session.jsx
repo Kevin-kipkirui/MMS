@@ -401,7 +401,7 @@ function EditLimitModal({ mode, maxLoss, currency, tradeLimit, onClose, onSaveLo
 }
 
 // ---------- component ----------
-export default function Session() {
+export default function Session({ onOpenSummit } = {}) {
   const AUTH_KEY = "mms_session_unlocked";
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -707,6 +707,14 @@ export default function Session() {
     setIsAuthenticated(false);
   };
 
+  const handleGoToSummit = () => {
+    if (typeof onOpenSummit === "function") {
+      onOpenSummit();
+    } else if (typeof window !== "undefined") {
+      window.location.hash = "summit";
+    }
+  };
+
   const addResult = () => {
     const v = parseFloat(pnlInput);
     if (isNaN(v) || v === 0) { pnlInputRef.current?.focus(); return; }
@@ -852,6 +860,9 @@ export default function Session() {
             </button>
             <button className="theme-toggle lg-logout-btn" onClick={handleLogout}>
               Log out
+            </button>
+            <button className="theme-toggle ts-summit-btn" onClick={handleGoToSummit}>
+              🏔️ Summit
             </button>
           </div>
           <div className="clockbox">
@@ -1345,6 +1356,7 @@ const CSS = `
 .ts-root .theme-toggle{margin:0;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);border-radius:var(--r-pill);padding:6px 12px;font-size:11.5px;font-weight:600;cursor:pointer;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);transition:all .18s ease;}
 .ts-root .theme-toggle:hover{border-color:var(--amber);color:var(--text);}
 .ts-root .lg-logout-btn{margin-left:0;}
+.ts-root .ts-summit-btn{background:var(--btn);color:var(--on-accent);border-color:transparent;font-weight:800;}
 .ts-root .clockbox{text-align:right;flex-shrink:0;}
 .ts-root .clockbox .time{font-size:26px;font-weight:800;letter-spacing:-.02em;}
 .ts-root .clockbox .date{font-size:12px;color:var(--muted);font-weight:500;}
