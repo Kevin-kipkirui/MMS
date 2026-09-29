@@ -32,6 +32,53 @@ function writeLS(key, value) {
   }
 }
 
+// ---------- day screenshot helpers ----------
+const IMG_PREFIX = "td_img_";
+
+function readImage(date) {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(IMG_PREFIX + date);
+  } catch (e) {
+    return null;
+  }
+}
+function writeImage(date, dataUrl) {
+  if (typeof window === "undefined") return true;
+  try {
+    if (dataUrl) window.localStorage.setItem(IMG_PREFIX + date, dataUrl);
+    else window.localStorage.removeItem(IMG_PREFIX + date);
+    return true;
+  } catch (e) {
+    return false; // quota exceeded
+  }
+}
+function compressImage(file, maxDim = 1100, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("read"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("decode"));
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const c = document.createElement("canvas");
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function useLocalStorageState(key, initialValue) {
   const [state, setState] = useState(() => readLS(key, initialValue));
   useEffect(() => {
@@ -435,7 +482,18 @@ export default function Session({ onOpenSummit } = {}) {
   const [newsTitle, setNewsTitle] = useState("");
   const [newsTime, setNewsTime] = useState("");
   const [newsImpact, setNewsImpact] = useState("high");
-  const [logForm, setLogForm] = useState({ wins: "", losses: "", missed: "", note: "" });
+  const [logForm, setLogForm] = useState(() => {
+    const saved = readLS("td_history", []).find((h) => h.date === todayKey());
+    return {
+      missed: saved && saved.missed ? String(saved.missed) : "",
+      note: saved ? saved.note || "" : "",
+    };
+  });
+  const [logImage, setLogImage] = useState(() => readImage(todayKey()));
+  const [imgBusy, setImgBusy] = useState(false);
+  const [imgMsg, setImgMsg] = useState("");
+  const [imgTick, setImgTick] = useState(0);
+  const [lightbox, setLightbox] = useState(null);
   const [savedMsg, setSavedMsg] = useState("");
   const [activeHistDate, setActiveHistDate] = useState(null);
   const [nowBtnVisible, setNowBtnVisible] = useState(false);
@@ -451,6 +509,7 @@ export default function Session({ onOpenSummit } = {}) {
   const [dockActive, setDockActive] = useState("home"); // visual only
 
   const pnlInputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const newsTitleRef = useRef(null);
   const blockRefs = useRef({});
   const lastAutoScroll = useRef(0);
@@ -747,8 +806,8 @@ export default function Session({ onOpenSummit } = {}) {
 
   const buildEntry = () => ({
     date: todayKey(),
-    wins: logForm.wins !== "" ? Number(logForm.wins) : wins,
-    losses: logForm.losses !== "" ? Number(logForm.losses) : losses,
+    wins,
+    losses,
     missed: Number(logForm.missed) || 0,
     net: netPnl,
     maxLoss,
@@ -769,8 +828,33 @@ export default function Session({ onOpenSummit } = {}) {
 
   const saveLog = () => {
     commitEntry(buildEntry());
-    setSavedMsg("Saved.");
-    setTimeout(() => setSavedMsg(""), 2500);
+    const ok = writeImage(todayKey(), logImage);
+    setImgTick((t) => t + 1);
+    setSavedMsg(ok ? "Saved." : "Saved, but the photo was too large to store.");
+    setTimeout(() => setSavedMsg(""), 3500);
+  };
+
+  const onPickImage = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setImgMsg("Please choose an image file.");
+      return;
+    }
+    setImgBusy(true);
+    setImgMsg("");
+    try {
+      setLogImage(await compressImage(file));
+    } catch (err) {
+      setImgMsg("Couldn't read that image.");
+    }
+    setImgBusy(false);
+  };
+
+  const removeImage = () => {
+    setLogImage(null);
+    setImgMsg("");
   };
 
   const dayHasData = () =>
@@ -783,7 +867,7 @@ export default function Session({ onOpenSummit } = {}) {
       if (!already) commitEntry(buildEntry());
     }
     setDay({ checks: {}, energy: null, pnl: [], news: [] });
-    setLogForm({ wins: "", losses: "", missed: "", note: "" });
+    setLogForm({ missed: "", note: "" });
   };
 
   const goToSection = (key, id) => {
@@ -793,6 +877,11 @@ export default function Session({ onOpenSummit } = {}) {
   };
 
   const activeHistEntry = activeHistDate ? historyByDate[activeHistDate] || null : null;
+  const detailImage = useMemo(
+    () => (activeHistDate ? readImage(activeHistDate) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeHistDate, imgTick]
+  );
 
   // All hooks have run by this point — safe to branch on auth state now.
   if (!isAuthenticated) {
@@ -1086,29 +1175,56 @@ export default function Session({ onOpenSummit } = {}) {
 
         <h2 className="section">End-of-day log</h2>
         <div className="logcard">
-          <div className="logrow">
-            <div>
-              <label>Wins</label>
-              <input type="number" min="0" placeholder="0" value={logForm.wins}
-                onChange={(e) => setLogForm((f) => ({ ...f, wins: e.target.value }))} />
+          <div className="logstats">
+            <div className="logstat">
+              <div className="v">{wins}</div>
+              <div className="l">Wins</div>
             </div>
-            <div>
-              <label>Losses</label>
-              <input type="number" min="0" placeholder="0" value={logForm.losses}
-                onChange={(e) => setLogForm((f) => ({ ...f, losses: e.target.value }))} />
+            <div className="logstat">
+              <div className="v">{losses}</div>
+              <div className="l">Losses</div>
             </div>
-            <div>
-              <label>Missed</label>
-              <input type="number" min="0" placeholder="0" value={logForm.missed}
-                onChange={(e) => setLogForm((f) => ({ ...f, missed: e.target.value }))} />
+            <div className="logstat">
+              <div className="v">{day.pnl.length}</div>
+              <div className="l">Trades</div>
             </div>
           </div>
+
+          <div className="logauto">Counted automatically from your trade log.</div>
+
           <label>What actually happened (one line, be blunt)</label>
           <textarea
             placeholder="e.g. good until 2pm, forced two trades after the break"
             value={logForm.note}
             onChange={(e) => setLogForm((f) => ({ ...f, note: e.target.value }))}
           />
+
+          <label>Missed setups <span className="opt">optional</span></label>
+          <input
+            type="number"
+            min="0"
+            placeholder="0"
+            value={logForm.missed}
+            onChange={(e) => setLogForm((f) => ({ ...f, missed: e.target.value }))}
+          />
+
+          <label>Screenshot <span className="opt">optional</span></label>
+          <input ref={fileInputRef} type="file" accept="image/*" onChange={onPickImage} hidden />
+          {logImage ? (
+            <div className="upload-preview">
+              <img src={logImage} alt="Day screenshot preview" onClick={() => setLightbox(logImage)} />
+              <div className="upload-actions">
+                <button type="button" onClick={() => fileInputRef.current?.click()}>Replace</button>
+                <button type="button" onClick={removeImage}>Remove</button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" className="upload-box" onClick={() => fileInputRef.current?.click()} disabled={imgBusy}>
+              {imgBusy ? "Processing…" : "＋ Add a chart or trade screenshot"}
+            </button>
+          )}
+          {imgMsg && <div className="upload-err">{imgMsg}</div>}
+
           <button className="savebtn" onClick={saveLog}>Save today's log</button>
           <div className="savedmsg">{savedMsg}</div>
         </div>
@@ -1197,6 +1313,7 @@ export default function Session({ onOpenSummit } = {}) {
                 <strong>{new Date(activeHistEntry.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}</strong>
                 <span>{activeHistEntry.stoppedOnTime ? "Stopped on time" : "Ran past the stop"}</span>
               </div>
+
               <div className="ddgrid">
                 <div className="ddstat">
                   <div className={`v${(activeHistEntry.net ?? 0) > 0 ? " pos" : (activeHistEntry.net ?? 0) < 0 ? " neg" : ""}`}>{fmt(activeHistEntry.net ?? 0)}</div>
@@ -1206,12 +1323,29 @@ export default function Session({ onOpenSummit } = {}) {
                 <div className="ddstat"><div className="v">{activeHistEntry.losses ?? 0}</div><div className="l">losses</div></div>
                 <div className="ddstat"><div className="v">{activeHistEntry.missed ?? 0}</div><div className="l">missed</div></div>
               </div>
-              {activeHistEntry.note && <div className="ddnote">"{activeHistEntry.note}"</div>}
+
+              {activeHistEntry.note && (
+                <>
+                  <div className="ddlabel">Notes</div>
+                  <div className="ddnote">"{activeHistEntry.note}"</div>
+                </>
+              )}
+
               <div className="ddnews">
                 {activeHistEntry.news && activeHistEntry.news.length
                   ? activeHistEntry.news.map((n) => `${n.time || "--:--"} \u00b7 ${n.title}`).join(" \u00b7 ")
                   : "No news logged that day."}
               </div>
+
+              {detailImage && (
+                <>
+                  <div className="ddlabel">Screenshot</div>
+                  <button type="button" className="ddimg" onClick={() => setLightbox(detailImage)} aria-label="View screenshot full size">
+                    <img src={detailImage} alt="Screenshot from this day" />
+                  </button>
+                </>
+              )}
+
               <button className="ddclose" onClick={() => setActiveHistDate(null)}>Close</button>
             </div>
           )}
@@ -1252,6 +1386,17 @@ export default function Session({ onOpenSummit } = {}) {
           </button>
         ))}
       </nav>
+
+      {lightbox && (
+        <div className="ts-modal-backdrop" onClick={() => setLightbox(null)}>
+          <img
+            className="ts-lightbox-img"
+            src={lightbox}
+            alt="Screenshot full size"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
 
       <EditLimitModal
         mode={editModal}
@@ -1581,6 +1726,28 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 @media (prefers-reduced-motion:reduce){
   .ts-root .block.just-scrolled,.ts-focus-enter,.ts-modal-backdrop,.ts-modal,.ts-root .stopband.limit{animation:none;}
 }
+
+/* ---------- auto stats + upload + day photo ---------- */
+.ts-root .logstats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.ts-root .logstat{background:var(--surface-2);border:1px solid var(--border);border-radius:16px;padding:12px 8px;text-align:center;}
+.ts-root .logstat .v{font-size:26px;font-weight:800;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums;}
+.ts-root .logstat .v.pos{color:var(--teal);}
+.ts-root .logstat .v.neg{color:var(--rose);}
+.ts-root .logstat .l{font-size:11px;color:var(--muted);margin-top:6px;font-weight:600;}
+.ts-root .logauto{font-size:11.5px;color:var(--muted);margin:8px 2px 4px;}
+.ts-root .logcard .opt{font-weight:500;opacity:.7;font-size:11px;margin-left:4px;}
+.ts-root .logcard input[type=number]{margin:0;}
+.ts-root .upload-box{width:100%;padding:18px;border-radius:var(--r-input);border:1.5px dashed var(--border);background:var(--surface-2);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;transition:all .18s ease;}
+.ts-root .upload-box:hover{border-color:var(--amber);color:var(--text);}
+.ts-root .upload-preview{position:relative;border-radius:18px;overflow:hidden;border:1px solid var(--border);background:var(--surface-2);}
+.ts-root .upload-preview img{display:block;width:100%;max-height:220px;object-fit:cover;cursor:zoom-in;}
+.ts-root .upload-actions{position:absolute;right:8px;bottom:8px;display:flex;gap:6px;}
+.ts-root .upload-actions button{border:none;border-radius:var(--r-pill);padding:6px 12px;font-size:11.5px;font-weight:700;cursor:pointer;background:rgba(0,0,0,.6);color:#fff;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);}
+.ts-root .upload-err{font-size:12px;color:var(--rose);margin-top:8px;}
+.ts-root .ddlabel{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px;}
+.ts-root .ddimg{display:block;width:100%;padding:0;border:1px solid var(--border);border-radius:16px;overflow:hidden;background:var(--surface-2);cursor:zoom-in;}
+.ts-root .ddimg img{display:block;width:100%;max-height:240px;object-fit:cover;}
+.ts-lightbox-img{max-width:100%;max-height:88vh;border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.6);}
 
 /* dark-only: Proton Pass details */
 .ts-root:not([data-theme="light"])::after{
