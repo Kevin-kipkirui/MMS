@@ -1269,31 +1269,31 @@ export default function Session({ onOpenSummit } = {}) {
 // ---------- scoped styles ----------
 const CSS = `
 .ts-root{
-/* ===== DARK: black + orange ===== */
---bg-grad:linear-gradient(180deg,#1b1b1e 0%,#111113 42%,#09090a 100%);
---surface:radial-gradient(150px 110px at 100% 0%,rgba(228,90,0,.26),transparent 72%),linear-gradient(160deg,#28282b,#161618);
+/* ===== DARK: graphite / silver (Proton Pass style) ===== */
+--bg-grad:linear-gradient(180deg,#1c1c1e 0%,#0f0f10 38%,#070708 100%);
+--surface:linear-gradient(180deg,rgba(255,255,255,.055) 0%,rgba(255,255,255,0) 38%),linear-gradient(160deg,#242426,#161617);
 --surface-2:rgba(255,255,255,.06);
---border:rgba(255,255,255,.09);
---text:#f4f4f5; --muted:#8e8e95;
---amber:#ee6a12; --amber-dim:rgba(238,106,18,.24);
---accent-text:#ff8a3d;
+--border:rgba(255,255,255,.08);
+--text:#f3f3f4; --muted:#8b8b91;
+--amber:#e6e6e9; --amber-dim:rgba(255,255,255,.14);
+--accent-text:#ffffff;
 --teal:#3fdc8c; --teal-dim:rgba(63,220,140,.15);
 --rose:#ff5d6c; --rose-dim:rgba(255,93,108,.16);
 --warn:#f2b45c; --warn-dim:rgba(242,180,92,.18);
---on-accent:#ffffff;
---focus-ring:#ff8a3d;
---orb-1:rgba(224,84,0,.34); --orb-2:rgba(170,62,0,.22); --orb-3:rgba(255,140,60,.07);
---hero:linear-gradient(155deg,#f2701a 0%,#d64f00 55%,#7c2a00 100%);
---hero-shadow:0 1px 0 rgba(255,255,255,.3) inset,0 28px 54px -24px rgba(220,80,0,.65);
---hero-ink:#7c2a00;
---btn:linear-gradient(180deg,#f57a26,#dc5200);
---meter:linear-gradient(90deg,#c94a00,#ff9a4d);
---modal-bg:#19191b;
---blur:blur(18px) saturate(130%);
---shadow-card:0 1px 0 rgba(255,255,255,.07) inset,0 20px 44px -20px rgba(0,0,0,.9);
---shadow-card-hover:0 1px 0 rgba(255,255,255,.1) inset,0 24px 48px -18px rgba(0,0,0,.95);
---glow-amber:rgba(238,106,18,.4); --glow-rose:rgba(255,93,108,.38);
---dock-bg:rgba(22,22,24,.82);
+--on-accent:#111113;
+--focus-ring:#d9d9dd;
+--orb-1:rgba(200,200,208,.20); --orb-2:rgba(120,120,128,.14); --orb-3:rgba(255,255,255,.05);
+--hero:linear-gradient(155deg,#4b4b4f 0%,#2b2b2e 48%,#141415 100%);
+--hero-shadow:0 1px 0 rgba(255,255,255,.16) inset,0 28px 54px -24px rgba(0,0,0,.9);
+--hero-ink:#141415;
+--btn:linear-gradient(180deg,#f7f7f8,#b4b4b9);
+--meter:linear-gradient(90deg,#8d8d93,#f4f4f5);
+--modal-bg:#18181a;
+--blur:blur(18px) saturate(120%);
+--shadow-card:0 1px 0 rgba(255,255,255,.07) inset,0 20px 44px -20px rgba(0,0,0,.95);
+--shadow-card-hover:0 1px 0 rgba(255,255,255,.1) inset,0 24px 48px -18px rgba(0,0,0,1);
+--glow-amber:rgba(255,255,255,.22); --glow-rose:rgba(255,93,108,.38);
+--dock-bg:rgba(24,24,26,.86);
 --r-card:26px; --r-input:14px; --r-pill:999px;
 
 padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
@@ -1581,6 +1581,21 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 @media (prefers-reduced-motion:reduce){
   .ts-root .block.just-scrolled,.ts-focus-enter,.ts-modal-backdrop,.ts-modal,.ts-root .stopband.limit{animation:none;}
 }
+
+/* dark-only: Proton Pass details */
+.ts-root:not([data-theme="light"])::after{
+content:""; position:fixed; left:0; right:0; top:0; height:340px; pointer-events:none; z-index:0;
+background-image:
+linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),
+linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+background-size:34px 34px;
+-webkit-mask-image:linear-gradient(180deg,#000 0%,transparent 100%);
+mask-image:linear-gradient(180deg,#000 0%,transparent 100%);
+}
+.ts-root:not([data-theme="light"]) .ts-target-card{border-color:rgba(255,255,255,.14);}
+.ts-root:not([data-theme="light"]) .ts-target-card::after{background:radial-gradient(420px 220px at 100% -10%,rgba(255,255,255,.2),transparent 65%);}
+.ts-root:not([data-theme="light"]) .ts-dock-btn.active{box-shadow:0 8px 18px -8px rgba(255,255,255,.35);}
+.ts-root:not([data-theme="light"]) .brand h1{font-weight:600;letter-spacing:-.035em;}
 
 /* light-theme dock (navy pill, like the reference) */
 .ts-root[data-theme="light"] .ts-dock-btn{color:#b9cbec;}
