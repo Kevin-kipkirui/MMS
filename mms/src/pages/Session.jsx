@@ -1005,7 +1005,7 @@ export default function Session({ onOpenSummit } = {}) {
   }
 
   if (!authUser) {
-    return <Login onSuccess={() => setAuthUser({})} />;
+    return <Login />;
   }
 
   // ---------- render helpers ----------

@@ -2,56 +2,52 @@ import React, { useEffect, useState } from "react";
 import Login from "./pages/Login";
 import Session from "./pages/Session";
 import Summit from "./pages/Summit";
-
-const AUTH_KEY = "mms_session_unlocked";
+import { supabase } from "./lib/supabase";
 
 function App() {
   const [view, setView] = useState("session");
-  const [isUnlocked, setIsUnlocked] = useState(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return window.sessionStorage.getItem(AUTH_KEY) === "true";
-    } catch {
-      return false;
-    }
-  });
+  const [authUser, setAuthUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const isUnlocked = !!authUser;
 
+  // Supabase owns the session now
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const syncAuth = () => {
-      try {
-        const unlocked = window.sessionStorage.getItem(AUTH_KEY) === "true";
-        setIsUnlocked(unlocked);
-        if (!unlocked) {
-          setView("session");
-          window.location.hash = "#session";
-        }
-      } catch {
-        setIsUnlocked(false);
-        setView("session");
-        window.location.hash = "#session";
-      }
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      setAuthUser(data.session ? data.session.user : null);
+      setAuthReady(true);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUser(session ? session.user : null);
+      setAuthReady(true);
+    });
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
     };
+  }, []);
+
+  // Keep the view in step with the URL hash, and reset it on logout
+  useEffect(() => {
+    if (typeof window === "undefined" || !authReady) return;
+
+    if (!isUnlocked) {
+      setView("session");
+      if (window.location.hash !== "#session") window.location.hash = "#session";
+      return;
+    }
 
     const syncView = () => {
       const hash = (window.location.hash || "").replace(/^#/, "").replace(/^\//, "").toLowerCase();
-      if (hash === "summit" && isUnlocked) {
-        setView("summit");
-      } else if (hash === "session" || !hash) {
-        setView("session");
-      }
+      if (hash === "summit") setView("summit");
+      else if (hash === "session" || !hash) setView("session");
     };
 
-    syncAuth();
     syncView();
-    window.addEventListener("storage", syncAuth);
     window.addEventListener("hashchange", syncView);
-    return () => {
-      window.removeEventListener("storage", syncAuth);
-      window.removeEventListener("hashchange", syncView);
-    };
-  }, [isUnlocked]);
+    return () => window.removeEventListener("hashchange", syncView);
+  }, [isUnlocked, authReady]);
 
   const openSummit = () => {
     if (!isUnlocked) return;
@@ -64,8 +60,12 @@ function App() {
     if (typeof window !== "undefined") window.location.hash = "#session";
   };
 
+  if (!authReady) {
+    return <div style={{ position: "fixed", inset: 0, background: "#070b12" }} aria-busy="true" />;
+  }
+
   if (!isUnlocked) {
-    return <Login onSuccess={() => setIsUnlocked(true)} storageKey={AUTH_KEY} />;
+    return <Login onSuccess={() => setAuthUser({})} />;
   }
 
   if (view === "summit") {
