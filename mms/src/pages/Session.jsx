@@ -115,6 +115,9 @@ const SCHEDULE = {
 
 const ALL_BLOCKS = [...SCHEDULE.prep, ...SCHEDULE.session, ...SCHEDULE.close];
 const IMPACT_RULE = { high: "Stand aside", med: "Half size", low: "Trade as normal" };
+// A trade with P&L strictly between -BE_LIMIT and +BE_LIMIT counts as break-even
+const BE_LIMIT = 10;
+const isBreakEven = (v) => Math.abs(v) < BE_LIMIT;
 
 function toMin(hhmm) {
   const p = (hhmm || "").split(":");
@@ -710,8 +713,9 @@ export default function Session({ onOpenSummit } = {}) {
     return { limit: false, head: "Session closed for today", sub: `Closed at ${fmt(netPnl)}. Log the day and step away.` };
   }, [netPnl, maxLoss, liveHighImpact, nowMin, fmt, money]);
 
-  const wins = day.pnl.filter((v) => v > 0).length;
-  const losses = day.pnl.filter((v) => v < 0).length;
+  const wins = day.pnl.filter((v) => v >= BE_LIMIT).length;
+  const losses = day.pnl.filter((v) => v <= -BE_LIMIT).length;
+  const breakevens = day.pnl.filter(isBreakEven).length;
   const usedFraction = Math.min(1, Math.max(0, -netPnl) / maxLoss);
 
   const sortedNews = useMemo(
@@ -915,6 +919,7 @@ export default function Session({ onOpenSummit } = {}) {
     date: todayKey(),
     wins,
     losses,
+    breakeven: breakevens,
     missed: Number(logForm.missed) || 0,
     net: netPnl,
     maxLoss,
@@ -1182,14 +1187,14 @@ export default function Session({ onOpenSummit } = {}) {
               <div><span className="num">{day.pnl.length}</span> <span className="maxof">/ <span>{tradeLimit}</span></span></div>
             </div>
             <div className="row" style={{ marginTop: 10 }}>
-              <div><span className="num">{wins}{"\u2013"}{losses}</span></div>
+              <div><span className="num">{wins}{"\u2013"}{losses}{"\u2013"}{breakevens}</span></div>
             </div>
             <div className="pnl-trades">
               {day.pnl.length === 0 ? (
                 <span className="pnl-meterlbl">No closed trades yet.</span>
               ) : (
                 day.pnl.map((v, i) => (
-                  <span className={`chip ${v >= 0 ? "win" : "loss"}`} key={i}>
+                  <span className={`chip ${isBreakEven(v) ? "be" : v > 0 ? "win" : "loss"}`} key={i}>
                     <span>{fmt(v)}</span>
                     <button aria-label={"Remove result " + fmt(v)} onClick={() => removeResult(i)}>&times;</button>
                   </span>
@@ -1297,12 +1302,16 @@ export default function Session({ onOpenSummit } = {}) {
         <div className="logcard">
           <div className="logstats">
             <div className="logstat">
-              <div className="v">{wins}</div>
+              <div className="v pos">{wins}</div>
               <div className="l">Wins</div>
             </div>
             <div className="logstat">
-              <div className="v">{losses}</div>
+              <div className="v neg">{losses}</div>
               <div className="l">Losses</div>
+            </div>
+            <div className="logstat">
+              <div className="v be">{breakevens}</div>
+              <div className="l">Break even</div>
             </div>
             <div className="logstat">
               <div className="v">{day.pnl.length}</div>
@@ -1310,7 +1319,9 @@ export default function Session({ onOpenSummit } = {}) {
             </div>
           </div>
 
-          <div className="logauto">Counted automatically from your trade log.</div>
+          <div className="logauto">
+            Counted automatically from your trade log. Break even = between {"\u2212"}{money(BE_LIMIT)} and +{money(BE_LIMIT)}.
+          </div>
 
           <label>What actually happened (one line, be blunt)</label>
           <textarea
@@ -1441,6 +1452,7 @@ export default function Session({ onOpenSummit } = {}) {
                 </div>
                 <div className="ddstat"><div className="v">{activeHistEntry.wins ?? 0}</div><div className="l">wins</div></div>
                 <div className="ddstat"><div className="v">{activeHistEntry.losses ?? 0}</div><div className="l">losses</div></div>
+                <div className="ddstat"><div className="v" style={{ color: "var(--warn)" }}>{activeHistEntry.breakeven ?? 0}</div><div className="l">break even</div></div>
                 <div className="ddstat"><div className="v">{activeHistEntry.missed ?? 0}</div><div className="l">missed</div></div>
               </div>
 
@@ -1700,6 +1712,7 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .ts-root .chip{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;border:1px solid var(--border);background:var(--surface-2);border-radius:var(--r-pill);padding:4px 8px 4px 11px;display:flex;align-items:center;gap:6px;}
 .ts-root .chip.win{border-color:var(--teal);color:var(--teal);background:var(--teal-dim);}
 .ts-root .chip.loss{border-color:var(--rose);color:var(--rose);background:var(--rose-dim);}
+.ts-root .chip.be{border-color:var(--warn);color:var(--warn);background:var(--warn-dim);}
 .ts-root .chip button{background:none;border:none;color:inherit;opacity:.6;cursor:pointer;font-size:14px;padding:0;line-height:1;}
 .ts-root .chip button:hover{opacity:1;}
 
@@ -1777,7 +1790,7 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .ts-root .daydetail .ddhead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border);}
 .ts-root .daydetail .ddhead strong{font-size:14.5px;font-weight:700;}
 .ts-root .daydetail .ddhead span{font-size:12px;color:var(--muted);}
-.ts-root .ddgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px;}
+.ts-root .ddgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:10px;}
 .ts-root .ddstat{text-align:center;}
 .ts-root .ddstat .v{font-size:18px;font-weight:700;}
 .ts-root .ddstat .v.pos{color:var(--teal);}
@@ -1819,6 +1832,7 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
   .ts-root .block{gap:10px;padding:13px;}
   .ts-root .block .time{width:70px;font-size:11.5px;}
   .ts-root .logrow{grid-template-columns:1fr 1fr;}
+  .ts-root .logstat .v{font-size:22px;}
 }
 @media (min-width:900px){.ts-root .wrap{max-width:560px;}}
 
@@ -1848,11 +1862,12 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 }
 
 /* ---------- auto stats + upload + day photo ---------- */
-.ts-root .logstats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.ts-root .logstats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
 .ts-root .logstat{background:var(--surface-2);border:1px solid var(--border);border-radius:16px;padding:12px 8px;text-align:center;}
 .ts-root .logstat .v{font-size:26px;font-weight:800;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums;}
 .ts-root .logstat .v.pos{color:var(--teal);}
 .ts-root .logstat .v.neg{color:var(--rose);}
+.ts-root .logstat .v.be{color:var(--warn);}
 .ts-root .logstat .l{font-size:11px;color:var(--muted);margin-top:6px;font-weight:600;}
 .ts-root .logauto{font-size:11.5px;color:var(--muted);margin:8px 2px 4px;}
 .ts-root .logcard .opt{font-weight:500;opacity:.7;font-size:11px;margin-left:4px;}
