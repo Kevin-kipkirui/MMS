@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import Login from "./pages/Login";
 import Session from "./pages/Session";
 import Summit from "./pages/Summit";
+import Performance from "./pages/Perfomance";
 import { supabase } from "./lib/supabase";
 
 function App() {
@@ -41,6 +42,7 @@ function App() {
     const syncView = () => {
       const hash = (window.location.hash || "").replace(/^#/, "").replace(/^\//, "").toLowerCase();
       if (hash === "summit") setView("summit");
+      else if (hash === "performance") setView("performance");
       else if (hash === "session" || !hash) setView("session");
     };
 
@@ -53,6 +55,12 @@ function App() {
     if (!isUnlocked) return;
     setView("summit");
     if (typeof window !== "undefined") window.location.hash = "#summit";
+  };
+
+  const openPerformance = () => {
+    if (!isUnlocked) return;
+    setView("performance");
+    if (typeof window !== "undefined") window.location.hash = "#performance";
   };
 
   const backToSession = () => {
@@ -72,7 +80,11 @@ function App() {
     return <Summit onBack={backToSession} />;
   }
 
-  return <Session onOpenSummit={openSummit} />;
+  if (view === "performance") {
+    return <Performance onBack={backToSession} />;
+  }
+
+  return <Session onOpenSummit={openSummit} onOpenPerformance={openPerformance} />;
 }
 
 export default App;

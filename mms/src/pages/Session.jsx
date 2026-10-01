@@ -446,7 +446,7 @@ function EditLimitModal({ mode, maxLoss, currency, tradeLimit, onClose, onSaveLo
 }
 
 // ---------- component ----------
-export default function Session({ onOpenSummit } = {}) {
+export default function Session({ onOpenSummit, onOpenPerformance } = {}) {
   const [authUser, setAuthUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
 
@@ -898,17 +898,35 @@ export default function Session({ onOpenSummit } = {}) {
       window.location.hash = "summit";
     }
   };
+  const handleGoToPerformance = () => {
+    if (typeof onOpenPerformance === "function") {
+      onOpenPerformance();
+    } else if (typeof window !== "undefined") {
+      window.location.hash = "performance";
+    }
+  };
 
   const addResult = () => {
     const v = parseFloat(pnlInput);
     if (isNaN(v) || v === 0) { pnlInputRef.current?.focus(); return; }
-    setDay((d) => ({ ...d, pnl: [...d.pnl, v] }));
+    const stamp = new Date();
+    const minuteOfDay = stamp.getHours() * 60 + stamp.getMinutes();
+    setDay((d) => {
+      const times = (d.times || []).slice();
+      while (times.length < d.pnl.length) times.push(null); // pad older trades logged before timestamps existed
+      times.push(minuteOfDay);
+      return { ...d, pnl: [...d.pnl, v], times };
+    });
     setPnlInput("");
     if (!scrollToNow(true)) pnlInputRef.current?.focus();
     else setTimeout(() => pnlInputRef.current?.blur(), 60);
   };
   const removeResult = (idx) => {
-    setDay((d) => ({ ...d, pnl: d.pnl.filter((_, i) => i !== idx) }));
+    setDay((d) => ({
+      ...d,
+      pnl: d.pnl.filter((_, i) => i !== idx),
+      times: (d.times || []).filter((_, i) => i !== idx),
+    }));
   };
 
   const openLossEdit = () => setEditModal("loss");
@@ -954,6 +972,7 @@ export default function Session({ onOpenSummit } = {}) {
     news: day.news.map((n) => ({ time: n.time, title: n.title, impact: n.impact })),
     note: logForm.note.trim(),
     stoppedOnTime: !!day.checks["eod"],
+    trades: day.pnl.map((v, i) => ({ v, m: day.times && day.times[i] != null ? day.times[i] : null })),
   });
 
   const commitEntry = (entry) => {
@@ -1005,7 +1024,7 @@ export default function Session({ onOpenSummit } = {}) {
       const already = history.some((h) => h.date === todayKey());
       if (!already) commitEntry(buildEntry());
     }
-    setDay({ checks: {}, energy: null, pnl: [], news: [] });
+    setDay({ checks: {}, energy: null, pnl: [], times: [], news: [] });
     setLogForm({ missed: "", note: "" });
     setAlerted([]);
   };
@@ -1097,6 +1116,9 @@ export default function Session({ onOpenSummit } = {}) {
             </button>
             <button className="theme-toggle ts-summit-btn" onClick={handleGoToSummit}>
               🏔️ Summit
+            </button>
+            <button className="theme-toggle ts-perf-btn" onClick={handleGoToPerformance}>
+              📈 Performance
             </button>
           </div>
           <div className="clockbox">
@@ -1687,6 +1709,7 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .ts-root .theme-toggle:hover{border-color:var(--amber);color:var(--text);}
 .ts-root .lg-logout-btn{margin-left:0;}
 .ts-root .ts-summit-btn{background:var(--btn);color:var(--on-accent);border-color:transparent;font-weight:800;}
+.ts-root .ts-perf-btn{background:var(--surface-2);color:var(--text);font-weight:800;}
 .ts-root .clockbox{text-align:right;flex-shrink:0;}
 .ts-root .clockbox .time{font-size:26px;font-weight:800;letter-spacing:-.02em;}
 .ts-root .clockbox .date{font-size:12px;color:var(--muted);font-weight:500;}
