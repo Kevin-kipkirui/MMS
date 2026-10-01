@@ -115,6 +115,7 @@ const SCHEDULE = {
 
 const ALL_BLOCKS = [...SCHEDULE.prep, ...SCHEDULE.session, ...SCHEDULE.close];
 const IMPACT_RULE = { high: "Stand aside", med: "Half size", low: "Trade as normal" };
+const IMPACT_LABEL = { high: "Red · High impact", med: "Orange · Medium impact", low: "Yellow · Low impact" };
 // A trade with P&L strictly between -BE_LIMIT and +BE_LIMIT counts as break-even
 const BE_LIMIT = 10;
 const isBreakEven = (v) => Math.abs(v) < BE_LIMIT;
@@ -506,6 +507,8 @@ export default function Session({ onOpenSummit } = {}) {
   const [editingTarget, setEditingTarget] = useState(false);
   const [targetInput, setTargetInput] = useState("");
   const [dockActive, setDockActive] = useState("home"); // visual only
+  // ids of news events whose "30 minutes to go" popup has already been shown/dismissed today
+  const [alerted, setAlerted] = useLocalStorageState("td_alerted_" + todayKey(), []);
 
   const pnlInputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -803,6 +806,25 @@ export default function Session({ onOpenSummit } = {}) {
     [nowMin]
   );
 
+  // ---------- news alert popup (fires when an event is within 30 min) ----------
+  const pendingAlert = useMemo(() => {
+    return (
+      day.news
+        .filter((n) => !alerted.includes(n.id) && toMin(n.time) !== null)
+        .map((n) => ({ ...n, minsLeft: toMin(n.time) - nowMin }))
+        .filter((n) => n.minsLeft > 0 && n.minsLeft <= 30)
+        .sort((a, b) => a.minsLeft - b.minsLeft)[0] || null
+    );
+  }, [day.news, alerted, nowMin]);
+
+  // short vibration on phones when the popup appears
+  const pendingAlertId = pendingAlert ? pendingAlert.id : null;
+  useEffect(() => {
+    if (pendingAlertId && typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate([200, 100, 200]);
+    }
+  }, [pendingAlertId]);
+
   // ---------- scroll-to-now ----------
   const scrollToNow = useCallback(
     (force) => {
@@ -914,6 +936,11 @@ export default function Session({ onOpenSummit } = {}) {
   const removeNews = (id) => {
     setDay((d) => ({ ...d, news: d.news.filter((n) => n.id !== id) }));
   };
+  const dismissAlert = () => {
+    if (!pendingAlert) return;
+    const id = pendingAlert.id;
+    setAlerted((a) => (a.includes(id) ? a : [...a, id]));
+  };
 
   const buildEntry = () => ({
     date: todayKey(),
@@ -980,6 +1007,7 @@ export default function Session({ onOpenSummit } = {}) {
     }
     setDay({ checks: {}, energy: null, pnl: [], news: [] });
     setLogForm({ missed: "", note: "" });
+    setAlerted([]);
   };
 
   const goToSection = (key, id) => {
@@ -1431,7 +1459,6 @@ export default function Session({ onOpenSummit } = {}) {
                     onMouseLeave={(e) => { if (entry) e.currentTarget.style.filter = "brightness(1)"; }}
                   >
                     <span>{Number(date.slice(-2))}</span>
-                    {entry?.stoppedOnTime === false && <span style={{ height: "4px", width: "4px", borderRadius: "50%", background: "var(--rose)" }} />}
                   </button>
                 );
               })}
@@ -1442,7 +1469,6 @@ export default function Session({ onOpenSummit } = {}) {
             <div className="daydetail show">
               <div className="ddhead">
                 <strong>{new Date(activeHistEntry.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}</strong>
-                <span>{activeHistEntry.stoppedOnTime ? "Stopped on time" : "Ran past the stop"}</span>
               </div>
 
               <div className="ddgrid">
@@ -1527,6 +1553,28 @@ export default function Session({ onOpenSummit } = {}) {
             alt="Screenshot full size"
             onClick={(e) => e.stopPropagation()}
           />
+        </div>
+      )}
+
+      {pendingAlert && (
+        <div className="ts-modal-backdrop ts-alert-backdrop" onClick={dismissAlert}>
+          <div
+            className={`ts-modal ts-alert ${pendingAlert.impact}`}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="ts-alert-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="ts-alert-icon" aria-hidden="true">🔔</div>
+            <div className="ts-alert-kicker" id="ts-alert-title">{IMPACT_LABEL[pendingAlert.impact]}</div>
+            <div className="ts-alert-title">
+              News in {pendingAlert.minsLeft} {pendingAlert.minsLeft === 1 ? "minute" : "minutes"}
+            </div>
+            <div className="ts-alert-event">{pendingAlert.title}</div>
+            <div className="ts-alert-time">Scheduled for {pendingAlert.time}</div>
+            <div className="ts-alert-rule">{IMPACT_RULE[pendingAlert.impact]}</div>
+            <button type="button" className="ts-modal-btn primary ts-alert-btn" onClick={dismissAlert}>Got it</button>
+          </div>
         </div>
       )}
 
@@ -1903,4 +1951,24 @@ mask-image:linear-gradient(180deg,#000 0%,transparent 100%);
 .ts-root[data-theme="light"] .ts-dock-btn{color:#b9cbec;}
 .ts-root[data-theme="light"] .ts-dock-btn:hover{color:#fff;}
 .ts-root[data-theme="light"] .ts-dock-btn.active{color:var(--on-accent);}
+
+/* ---------- news alert popup ---------- */
+.ts-alert-backdrop{align-items:center;padding:20px;z-index:110;}
+.ts-alert{border-radius:28px;text-align:center;max-width:380px;padding:28px 24px 22px;animation:ts-alert-pop .28s cubic-bezier(.2,1.2,.4,1);}
+@keyframes ts-alert-pop{from{transform:scale(.92) translateY(10px);opacity:0;}to{transform:scale(1) translateY(0);opacity:1;}}
+.ts-alert-icon{width:58px;height:58px;margin:0 auto 14px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:26px;background:var(--surface-2);animation:ts-alert-ring 1.6s ease-in-out infinite;}
+@keyframes ts-alert-ring{0%,100%{transform:rotate(0);}10%{transform:rotate(14deg);}20%{transform:rotate(-12deg);}30%{transform:rotate(8deg);}40%{transform:rotate(0);}}
+.ts-alert.high .ts-alert-icon{background:var(--rose-dim);box-shadow:0 0 0 6px var(--rose-dim);}
+.ts-alert.med .ts-alert-icon{background:var(--warn-dim);box-shadow:0 0 0 6px var(--warn-dim);}
+.ts-alert.low .ts-alert-icon{background:var(--teal-dim);box-shadow:0 0 0 6px var(--teal-dim);}
+.ts-alert-kicker{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+.ts-alert.high .ts-alert-kicker{color:var(--rose);}
+.ts-alert.med .ts-alert-kicker{color:var(--warn);}
+.ts-alert.low .ts-alert-kicker{color:var(--teal);}
+.ts-alert-title{font-size:22px;font-weight:800;letter-spacing:-.025em;margin-bottom:8px;}
+.ts-alert-event{font-size:15px;font-weight:600;overflow-wrap:anywhere;}
+.ts-alert-time{font-size:12.5px;color:var(--muted);margin-top:4px;font-variant-numeric:tabular-nums;}
+.ts-alert-rule{display:inline-block;margin:14px 0 18px;padding:6px 14px;border-radius:999px;font-size:12px;font-weight:700;background:var(--surface-2);border:1px solid var(--border);}
+.ts-alert-btn{width:100%;}
+@media (prefers-reduced-motion:reduce){.ts-alert,.ts-alert-icon{animation:none;}}
 `;
