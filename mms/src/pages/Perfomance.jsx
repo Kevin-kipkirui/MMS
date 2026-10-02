@@ -410,15 +410,27 @@ function SlotChart({ slots, fmt }) {
 }
 
 function WeekChart({ rows, fmt }) {
-  const W = 480, H = 200, PX = 16, PT = 26, PB = 38;
+  if (!rows.length) return null;
+
+  const W = 480, H = 220, PX = 16;
+  const TOP = 12;          // space above the tallest positive value label
+  const LABEL = 20;        // room reserved for a value label above/below a bar
+  const AXIS_BAND = 40;    // fixed band at the bottom for "Week N / days x–y"
+
   const maxPos = Math.max(0, ...rows.map((r) => r.net));
   const maxNeg = Math.max(0, ...rows.map((r) => -r.net));
   const range = maxPos + maxNeg || 1;
-  const plotH = H - PT - PB, k = plotH / range, zeroY = PT + plotH * (maxPos / range);
-  const slot = rows.length ? (W - 2 * PX) / rows.length : 0;
-  const bw = Math.min(64, slot * 0.56);
 
-  if (!rows.length) return null;
+  // bars live strictly between plotTop and plotBottom; labels get their own padding
+  const plotTop = TOP + (maxPos > 0 ? LABEL : 0);
+  const plotBottom = H - AXIS_BAND - (maxNeg > 0 ? LABEL : 0);
+  const plotH = Math.max(30, plotBottom - plotTop);
+  const k = plotH / range;
+  const zeroY = plotTop + plotH * (maxPos / range);
+
+  const slot = (W - 2 * PX) / rows.length;
+  const bw = Math.min(64, slot * 0.56);
+  const axisY = H - AXIS_BAND + 16;
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Total profit and loss for each week of the month" style={{ display: "block" }}>
@@ -428,7 +440,7 @@ function WeekChart({ rows, fmt }) {
         const up = r.net >= 0;
         const h = r.n ? Math.max(3, Math.abs(r.net) * k) : 0;
         const y = up ? zeroY - h : zeroY;
-        const labelY = up ? y - 7 : y + h + 14;
+        const labelY = up ? y - 6 : y + h + 13;
 
         return (
           <g key={r.id || r.label}>
@@ -441,8 +453,8 @@ function WeekChart({ rows, fmt }) {
             ) : (
               <circle cx={cx} cy={zeroY} r="2.5" style={{ fill: "var(--muted)", opacity: 0.4 }} />
             )}
-            <text x={cx} y={H - 20} textAnchor="middle" style={{ fill: "var(--text)", fontSize: "11.5px", fontWeight: 700 }}>{r.label}</text>
-            <text x={cx} y={H - 7} textAnchor="middle" style={{ fill: "var(--muted)", fontSize: "9.5px", fontWeight: 600 }}>{`days ${r.span}`}</text>
+            <text x={cx} y={axisY} textAnchor="middle" style={{ fill: "var(--text)", fontSize: "11.5px", fontWeight: 700 }}>{r.label}</text>
+            <text x={cx} y={axisY + 14} textAnchor="middle" style={{ fill: "var(--muted)", fontSize: "9.5px", fontWeight: 600 }}>{`days ${r.span}`}</text>
           </g>
         );
       })}
