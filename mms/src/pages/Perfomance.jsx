@@ -53,6 +53,36 @@ function isWeekday(dateStr) {
 }
 const isActive = (e) => (e.wins || 0) + (e.losses || 0) + (e.breakeven || 0) > 0 || (e.net || 0) !== 0;
 
+// ---------- weekly helpers ----------
+const DAY_MS = 86400000;
+const mondayOf = (d) => {
+  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
+  return m;
+};
+
+// Week 1 = the first Mon–Fri week that contains a trading weekday in that month.
+function weekOfMonth(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  const f = new Date(d.getFullYear(), d.getMonth(), 1);
+  while (f.getDay() === 0 || f.getDay() === 6) f.setDate(f.getDate() + 1);
+  return Math.round((mondayOf(d) - mondayOf(f)) / (7 * DAY_MS)) + 1;
+}
+
+// "Mar 3 – Mar 7", clamped to the month the date belongs to.
+function weekRange(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  const mon = mondayOf(d);
+  const fri = new Date(mon);
+  fri.setDate(mon.getDate() + 4);
+  const first = new Date(d.getFullYear(), d.getMonth(), 1);
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  const a = mon < first ? first : mon;
+  const b = fri > last ? last : fri;
+  const f = (x) => x.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return f(a) + " – " + f(b);
+}
+
 function monthLabel(key, short) {
   const y = Number(key.slice(0, 4));
   const m = Number(key.slice(5, 7)) - 1;
@@ -185,6 +215,50 @@ function analyseTimes(days) {
     });
   });
   return { blocks, slots, counted };
+}
+
+// Weeks inside one month, ranked best to worst by net P&L.
+function computeWeeks(days) {
+  const g = {};
+  days.forEach((d) => {
+    const w = weekOfMonth(d.date);
+    (g[w] = g[w] || []).push(d);
+  });
+  const rows = Object.keys(g)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map((w) => ({ w, range: weekRange(g[w][0].date), s: computeStats(g[w]) }));
+  const ranked = rows.slice().sort((a, b) => b.s.net - a.s.net || a.w - b.w);
+  ranked.forEach((r, i) => { r.rank = i + 1; });
+  return { rows, ranked };
+}
+
+// Week 1 / 2 / 3 / 4 / 5 compared across every month on record.
+// "avg" is the average net per week-instance, so a half-week 5 isn't unfairly
+// compared with full weeks by raw totals alone.
+function analyseWeekPattern(entries) {
+  const g = {};
+  entries.forEach((e) => {
+    const w = weekOfMonth(e.date);
+    const inst = e.date.slice(0, 7);
+    if (!g[w]) g[w] = { w, days: [], inst: {} };
+    g[w].days.push(e);
+    g[w].inst[inst] = (g[w].inst[inst] || 0) + (e.net || 0);
+  });
+  return Object.values(g)
+    .sort((a, b) => a.w - b.w)
+    .map((x) => {
+      const nets = Object.values(x.inst);
+      const net = nets.reduce((a, b) => a + b, 0);
+      return {
+        w: x.w,
+        weeks: nets.length,
+        net,
+        avg: net / nets.length,
+        profitable: nets.filter((v) => v > 0).length,
+        s: computeStats(x.days),
+      };
+    });
 }
 
 function buildInsights(t, fmt) {
@@ -395,6 +469,21 @@ export default function Performance({ onBack } = {}) {
   const timeData = useMemo(() => analyseTimes(scope === "month" ? monthDays : entries), [scope, monthDays, entries]);
   const insights = useMemo(() => buildInsights(timeData, fmt), [timeData, currency]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const weekData = useMemo(() => computeWeeks(monthDays), [monthDays]);
+  const weekPattern = useMemo(() => analyseWeekPattern(entries), [entries]);
+
+  const weekMax = Math.max(1, ...weekData.rows.map((r) => Math.abs(r.s.net)));
+  const patMax = Math.max(1, ...weekPattern.map((r) => Math.abs(r.avg)));
+  const multiWeek = weekData.rows.length > 1;
+  const bestWeek = multiWeek && weekData.ranked[0].s.net > 0 ? weekData.ranked[0] : null;
+  const worstWeekCand = multiWeek ? weekData.ranked[weekData.ranked.length - 1] : null;
+  const worstWeek = worstWeekCand && worstWeekCand.s.net < 0 ? worstWeekCand : null;
+
+  const patBest = weekPattern.length > 1
+    ? weekPattern.slice().sort((a, b) => b.avg - a.avg)[0] : null;
+  const patWorst = weekPattern.length > 1
+    ? weekPattern.slice().sort((a, b) => a.avg - b.avg)[0] : null;
+
   const idx = months.indexOf(monthKey);
   const olderMonth = idx >= 0 ? months[idx + 1] : undefined;
   const newerMonth = idx > 0 ? months[idx - 1] : undefined;
@@ -500,6 +589,98 @@ export default function Performance({ onBack } = {}) {
 
             <h2 className="pf-section">Daily P&amp;L<span className="pf-sub">each trading day</span></h2>
             <div className="pf-card"><DailyBars days={monthDays} monthKey={monthKey} fmt={fmt} /></div>
+
+            <h2 className="pf-section">Weekly ranking<span className="pf-sub">best to worst, {monthLabel(monthKey, true)}</span></h2>
+            <div className="pf-card">
+              {weekData.ranked.map((r) => {
+                const isBest = bestWeek && r.w === bestWeek.w;
+                const isWorst = worstWeek && r.w === worstWeek.w;
+                const w = (Math.abs(r.s.net) / weekMax) * 50;
+                return (
+                  <div className={"pf-wrank" + (isBest ? " gold" : isWorst ? " low" : "")} key={r.w}>
+                    <div className="pf-wrank-head">
+                      <span className="pf-wrank-rank">#{r.rank}</span>
+                      <div className="pf-wrank-title">
+                        <b>Week {r.w}</b>
+                        <span>{r.range}</span>
+                      </div>
+                      {isBest && <span className="pf-tag pos">Best</span>}
+                      {isWorst && <span className="pf-tag neg">Worst</span>}
+                    </div>
+                    <div className="pf-bbar" aria-hidden="true">
+                      <div className="pf-baxis" />
+                      <div className={"pf-bfill " + (r.s.net >= 0 ? "pos" : "neg")}
+                        style={r.s.net >= 0 ? { left: "50%", width: w + "%" } : { right: "50%", width: w + "%" }} />
+                    </div>
+                    <div className="pf-bmeta">
+                      {r.s.n} {r.s.n === 1 ? "day" : "days"} · {pct(r.s.winRate)} win · PF {pfText(r.s.pf)} · {r.s.green}/{r.s.n} green
+                    </div>
+                    <div className={"pf-bval " + tone(r.s.net)}>{fmt(r.s.net)}</div>
+                    <div className="pf-bmeta">
+                      {r.s.trades} {r.s.trades === 1 ? "trade" : "trades"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {(bestWeek || worstWeek) && (
+              <div className="pf-insights">
+                {bestWeek && (
+                  <div className="pf-insight pos">
+                    Week {bestWeek.w} ({bestWeek.range}) was your best: {fmt(bestWeek.s.net)} across {bestWeek.s.n} {bestWeek.s.n === 1 ? "day" : "days"}.
+                  </div>
+                )}
+                {worstWeek && (
+                  <div className="pf-insight neg">
+                    Week {worstWeek.w} ({worstWeek.range}) hurt the most: {fmt(worstWeek.s.net)}. Look at what changed that week: size, overtrading, or skipped rules.
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* week-of-month pattern */}
+        {weekPattern.length > 0 && (
+          <>
+            <h2 className="pf-section">Which week pays?<span className="pf-sub">avg per week, all months</span></h2>
+            <div className="pf-card">
+              {weekPattern.map((x) => {
+                const w = (Math.abs(x.avg) / patMax) * 50;
+                const isBest = patBest && x.w === patBest.w && x.avg > 0;
+                const isWorst = patWorst && x.w === patWorst.w && x.avg < 0;
+                return (
+                  <div className={"pf-wrank" + (isBest ? " gold" : isWorst ? " low" : "")} key={x.w}>
+                    <div className="pf-wrank-head">
+                      <span className="pf-wrank-rank">{x.w}</span>
+                      <div className="pf-wrank-title">
+                        <b>Week {x.w}</b>
+                        <span>{x.weeks} {x.weeks === 1 ? "week" : "weeks"} on record</span>
+                      </div>
+                      {isBest && <span className="pf-tag pos">Best</span>}
+                      {isWorst && <span className="pf-tag neg">Worst</span>}
+                    </div>
+                    <div className="pf-bbar" aria-hidden="true">
+                      <div className="pf-baxis" />
+                      <div className={"pf-bfill " + (x.avg >= 0 ? "pos" : "neg")}
+                        style={x.avg >= 0 ? { left: "50%", width: w + "%" } : { right: "50%", width: w + "%" }} />
+                    </div>
+                    <div className="pf-bmeta">
+                      {x.profitable} of {x.weeks} profitable · {pct(x.s.winRate)} win · total {fmt(x.net)}
+                    </div>
+                    <div className={"pf-bval " + tone(x.avg)}>{fmt(x.avg)}</div>
+                    <div className="pf-bmeta">avg / week</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="pf-insight note">
+              {weekPattern.every((x) => x.weeks >= 3)
+                ? "average net per week · weeks run Mon–Fri"
+                : "small sample: a week position needs 3+ months before it means much"}
+            </div>
           </>
         )}
 
@@ -720,6 +901,22 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .pf-insight.neg{background:var(--rose-dim);border-color:transparent;}
 .pf-insight.note{color:var(--muted);font-size:12px;}
 
+/* weekly ranking */
+.pf-wrow{display:grid;grid-template-columns:30px 1fr 84px;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);}
+.pf-wrow:last-of-type{border-bottom:none;}
+.pf-wrank{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:800;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);font-variant-numeric:tabular-nums;}
+.pf-wrank.gold{background:var(--btn);color:var(--on-accent);border-color:transparent;}
+.pf-wrank.low{background:var(--rose-dim);color:var(--rose);border-color:transparent;}
+.pf-wmid{min-width:0;}
+.pf-wtitle{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:7px;}
+.pf-wtitle b{font-size:13.5px;font-weight:700;}
+.pf-wtitle span{font-size:11px;color:var(--muted);}
+.pf-wtitle .pf-tag-in{position:static;color:inherit;}
+.pf-wtitle .pf-tag.pos{color:var(--teal);}
+.pf-wtitle .pf-tag.neg{color:var(--rose);}
+.pf-wmeta{font-size:10.5px;color:var(--muted);margin-top:6px;line-height:1.35;font-variant-numeric:tabular-nums;}
+.pf-wnum{text-align:right;}
+
 /* tables + lists */
 .pf-table{padding:8px 10px;}
 .pf-trow{display:grid;grid-template-columns:1.5fr .6fr 1.2fr .8fr .8fr;gap:6px;align-items:center;width:100%;text-align:left;padding:11px 8px;border:none;border-radius:14px;background:none;color:var(--text);font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;cursor:pointer;}
@@ -740,5 +937,6 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 @media (max-width:420px){
   .pf-brow{grid-template-columns:78px 1fr 70px;}
   .pf-kpi-v{font-size:23px;}
+  .pf-wrow{grid-template-columns:26px 1fr 72px;gap:10px;}
 }
 `;
