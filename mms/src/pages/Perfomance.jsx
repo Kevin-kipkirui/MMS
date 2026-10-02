@@ -53,35 +53,15 @@ function isWeekday(dateStr) {
 }
 const isActive = (e) => (e.wins || 0) + (e.losses || 0) + (e.breakeven || 0) > 0 || (e.net || 0) !== 0;
 
-// ---------- weekly helpers ----------
-const DAY_MS = 86400000;
-const mondayOf = (d) => {
-  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
-  return m;
-};
-
-// Week 1 = the first Mon–Fri week that contains a trading weekday in that month.
-function weekOfMonth(dateStr) {
-  const d = new Date(dateStr + "T00:00:00");
-  const f = new Date(d.getFullYear(), d.getMonth(), 1);
-  while (f.getDay() === 0 || f.getDay() === 6) f.setDate(f.getDate() + 1);
-  return Math.round((mondayOf(d) - mondayOf(f)) / (7 * DAY_MS)) + 1;
-}
-
-// "Mar 3 – Mar 7", clamped to the month the date belongs to.
-function weekRange(dateStr) {
-  const d = new Date(dateStr + "T00:00:00");
-  const mon = mondayOf(d);
-  const fri = new Date(mon);
-  fri.setDate(mon.getDate() + 4);
-  const first = new Date(d.getFullYear(), d.getMonth(), 1);
-  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  const a = mon < first ? first : mon;
-  const b = fri > last ? last : fri;
-  const f = (x) => x.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  return f(a) + " – " + f(b);
-}
+// ---------- week-of-month helpers ----------
+// A month is split into 4 buckets by calendar date: 1–7, 8–14, 15–21, 22–end.
+const WEEK_BUCKETS = [
+  { id: "w1", label: "Week 1", span: "1\u20137" },
+  { id: "w2", label: "Week 2", span: "8\u201314" },
+  { id: "w3", label: "Week 3", span: "15\u201321" },
+  { id: "w4", label: "Week 4", span: "22\u2013end" },
+];
+const weekOfMonth = (dateStr) => Math.min(4, Math.ceil(Number(dateStr.slice(8, 10)) / 7));
 
 function monthLabel(key, short) {
   const y = Number(key.slice(0, 4));
@@ -217,48 +197,64 @@ function analyseTimes(days) {
   return { blocks, slots, counted };
 }
 
-// Weeks inside one month, ranked best to worst by net P&L.
-function computeWeeks(days) {
-  const g = {};
+// Groups trading days into Week 1–4 of their month and measures each bucket.
+function analyseWeeks(days) {
+  const buckets = WEEK_BUCKETS.map((b) => ({ ...b, days: [], byMonth: {} }));
+  const allMonths = new Set();
+
   days.forEach((d) => {
-    const w = weekOfMonth(d.date);
-    (g[w] = g[w] || []).push(d);
+    const b = buckets[weekOfMonth(d.date) - 1];
+    const mk = d.date.slice(0, 7);
+    b.days.push(d);
+    b.byMonth[mk] = (b.byMonth[mk] || 0) + (d.net || 0);
+    allMonths.add(mk);
   });
-  const rows = Object.keys(g)
-    .map(Number)
-    .sort((a, b) => a - b)
-    .map((w) => ({ w, range: weekRange(g[w][0].date), s: computeStats(g[w]) }));
-  const ranked = rows.slice().sort((a, b) => b.s.net - a.s.net || a.w - b.w);
-  ranked.forEach((r, i) => { r.rank = i + 1; });
-  return { rows, ranked };
+
+  const rows = buckets.map((b) => {
+    const s = computeStats(b.days);
+    const monthNets = Object.values(b.byMonth);
+    return {
+      id: b.id,
+      label: b.label,
+      span: b.span,
+      s,
+      n: s.n,
+      net: s.net,
+      avgDay: s.n ? s.net / s.n : null,
+      months: monthNets.length,
+    };
+  });
+
+  const totalNet = rows.reduce((a, r) => a + r.net, 0);
+  // Share of total profit. Only meaningful while the overall total is positive.
+  rows.forEach((r) => { r.share = totalNet > 0 && r.n ? (r.net / totalNet) * 100 : null; });
+
+  // Best / worst are judged on average per trading day, so the longer Week 4 isn't favoured.
+  const active = rows.filter((r) => r.n > 0);
+  const byAvg = active.slice().sort((a, b) => b.avgDay - a.avgDay);
+  const best = active.length > 1 && byAvg[0].avgDay > 0 ? byAvg[0] : null;
+  const last = byAvg[byAvg.length - 1];
+  const worst = active.length > 1 && last.avgDay < 0 ? last : null;
+
+  return { rows, totalNet, active: active.length, months: allMonths.size, best, worst };
 }
 
-// Week 1 / 2 / 3 / 4 / 5 compared across every month on record.
-// "avg" is the average net per week-instance, so a half-week 5 isn't unfairly
-// compared with full weeks by raw totals alone.
-function analyseWeekPattern(entries) {
-  const g = {};
-  entries.forEach((e) => {
-    const w = weekOfMonth(e.date);
-    const inst = e.date.slice(0, 7);
-    if (!g[w]) g[w] = { w, days: [], inst: {} };
-    g[w].days.push(e);
-    g[w].inst[inst] = (g[w].inst[inst] || 0) + (e.net || 0);
-  });
-  return Object.values(g)
-    .sort((a, b) => a.w - b.w)
-    .map((x) => {
-      const nets = Object.values(x.inst);
-      const net = nets.reduce((a, b) => a + b, 0);
-      return {
-        w: x.w,
-        weeks: nets.length,
-        net,
-        avg: net / nets.length,
-        profitable: nets.filter((v) => v > 0).length,
-        s: computeStats(x.days),
-      };
-    });
+function buildWeekInsights(wd, fmt) {
+  const out = [];
+  if (!wd.active) return out;
+  const plural = (n, w) => n + " " + w + (n === 1 ? "" : "s");
+
+  if (wd.best) {
+    const r = wd.best;
+    out.push({ tone: "pos", text: `${r.label} (days ${r.span}) is your strongest: ${fmt(r.avgDay)} per day, ${fmt(r.net)} in total over ${plural(r.n, "day")}.` });
+  }
+  if (wd.worst) {
+    const r = wd.worst;
+    out.push({ tone: "neg", text: `${r.label} (days ${r.span}) costs you the most: ${fmt(r.avgDay)} per day, ${fmt(r.net)} in total over ${plural(r.n, "day")}. Worth trading smaller or tighter in this part of the month.` });
+  }
+  if (wd.active > 1) out.push({ tone: "note", text: "Best and Worst compare the average per trading day, so the longer Week 4 isn’t favoured." });
+  if (wd.months < 3) out.push({ tone: "note", text: `Small sample: ${plural(wd.months, "month")} of data so far. Treat this as a hint, not a rule.` });
+  return out;
 }
 
 function buildInsights(t, fmt) {
@@ -413,11 +409,53 @@ function SlotChart({ slots, fmt }) {
   );
 }
 
+function WeekChart({ rows, fmt }) {
+  const W = 480, H = 200, PX = 16, PT = 26, PB = 38;
+  const maxPos = Math.max(0, ...rows.map((r) => r.net));
+  const maxNeg = Math.max(0, ...rows.map((r) => -r.net));
+  const range = maxPos + maxNeg || 1;
+  const plotH = H - PT - PB, k = plotH / range, zeroY = PT + plotH * (maxPos / range);
+  const slot = rows.length ? (W - 2 * PX) / rows.length : 0;
+  const bw = Math.min(64, slot * 0.56);
+
+  if (!rows.length) return null;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Total profit and loss for each week of the month" style={{ display: "block" }}>
+      <line x1={PX} x2={W - PX} y1={zeroY} y2={zeroY} style={{ stroke: "var(--border)" }} strokeDasharray="3 4" />
+      {rows.map((r, i) => {
+        const cx = PX + i * slot + slot / 2;
+        const up = r.net >= 0;
+        const h = r.n ? Math.max(3, Math.abs(r.net) * k) : 0;
+        const y = up ? zeroY - h : zeroY;
+        const labelY = up ? y - 7 : y + h + 14;
+
+        return (
+          <g key={r.id || r.label}>
+            <title>{`${r.label} (days ${r.span}) · ${r.n} day${r.n === 1 ? "" : "s"} · ${fmt(r.net)}`}</title>
+            {r.n > 0 ? (
+              <>
+                <rect x={cx - bw / 2} y={y} width={bw} height={h} rx="8" style={{ fill: up ? "var(--teal)" : "var(--rose)", opacity: 0.9 }} />
+                <text x={cx} y={labelY} textAnchor="middle" style={{ fill: up ? "var(--teal)" : "var(--rose)", fontSize: "11px", fontWeight: 800 }}>{fmt(r.net)}</text>
+              </>
+            ) : (
+              <circle cx={cx} cy={zeroY} r="2.5" style={{ fill: "var(--muted)", opacity: 0.4 }} />
+            )}
+            <text x={cx} y={H - 20} textAnchor="middle" style={{ fill: "var(--text)", fontSize: "11.5px", fontWeight: 700 }}>{r.label}</text>
+            <text x={cx} y={H - 7} textAnchor="middle" style={{ fill: "var(--muted)", fontSize: "9.5px", fontWeight: 600 }}>{`days ${r.span}`}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 // ---------- component ----------
 export default function Performance({ onBack } = {}) {
   const [tick, setTick] = useState(0);
   const [monthKey, setMonthKey] = useState(() => todayKey().slice(0, 7));
   const [scope, setScope] = useState("all"); // "all" | "month" (for the time analysis)
+  const [weekScope, setWeekScope] = useState("year"); // "year" | "all" (for week-of-month)
 
   // refresh when the tab regains focus or another tab writes to storage
   useEffect(() => {
@@ -469,20 +507,15 @@ export default function Performance({ onBack } = {}) {
   const timeData = useMemo(() => analyseTimes(scope === "month" ? monthDays : entries), [scope, monthDays, entries]);
   const insights = useMemo(() => buildInsights(timeData, fmt), [timeData, currency]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const weekData = useMemo(() => computeWeeks(monthDays), [monthDays]);
-  const weekPattern = useMemo(() => analyseWeekPattern(entries), [entries]);
-
-  const weekMax = Math.max(1, ...weekData.rows.map((r) => Math.abs(r.s.net)));
-  const patMax = Math.max(1, ...weekPattern.map((r) => Math.abs(r.avg)));
-  const multiWeek = weekData.rows.length > 1;
-  const bestWeek = multiWeek && weekData.ranked[0].s.net > 0 ? weekData.ranked[0] : null;
-  const worstWeekCand = multiWeek ? weekData.ranked[weekData.ranked.length - 1] : null;
-  const worstWeek = worstWeekCand && worstWeekCand.s.net < 0 ? worstWeekCand : null;
-
-  const patBest = weekPattern.length > 1
-    ? weekPattern.slice().sort((a, b) => b.avg - a.avg)[0] : null;
-  const patWorst = weekPattern.length > 1
-    ? weekPattern.slice().sort((a, b) => a.avg - b.avg)[0] : null;
+  const yearKey = monthKey.slice(0, 4);
+  const weekEntries = useMemo(
+    () => (weekScope === "year" ? entries.filter((e) => e.date.startsWith(yearKey)) : entries),
+    [weekScope, entries, yearKey]
+  );
+  const weekData = useMemo(() => analyseWeeks(weekEntries), [weekEntries]);
+  const weekInsights = useMemo(() => buildWeekInsights(weekData, fmt), [weekData, currency]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shareText = (r) =>
+    r.share == null ? "\u2014" : (r.share < 0 ? "\u2212" : "") + Math.abs(Math.round(r.share)) + "% of profit";
 
   const idx = months.indexOf(monthKey);
   const olderMonth = idx >= 0 ? months[idx + 1] : undefined;
@@ -590,97 +623,55 @@ export default function Performance({ onBack } = {}) {
             <h2 className="pf-section">Daily P&amp;L<span className="pf-sub">each trading day</span></h2>
             <div className="pf-card"><DailyBars days={monthDays} monthKey={monthKey} fmt={fmt} /></div>
 
-            <h2 className="pf-section">Weekly ranking<span className="pf-sub">best to worst, {monthLabel(monthKey, true)}</span></h2>
-            <div className="pf-card">
-              {weekData.ranked.map((r) => {
-                const isBest = bestWeek && r.w === bestWeek.w;
-                const isWorst = worstWeek && r.w === worstWeek.w;
-                const w = (Math.abs(r.s.net) / weekMax) * 50;
-                return (
-                  <div className={"pf-wrank" + (isBest ? " gold" : isWorst ? " low" : "")} key={r.w}>
-                    <div className="pf-wrank-head">
-                      <span className="pf-wrank-rank">#{r.rank}</span>
-                      <div className="pf-wrank-title">
-                        <b>Week {r.w}</b>
-                        <span>{r.range}</span>
-                      </div>
-                      {isBest && <span className="pf-tag pos">Best</span>}
-                      {isWorst && <span className="pf-tag neg">Worst</span>}
-                    </div>
-                    <div className="pf-bbar" aria-hidden="true">
-                      <div className="pf-baxis" />
-                      <div className={"pf-bfill " + (r.s.net >= 0 ? "pos" : "neg")}
-                        style={r.s.net >= 0 ? { left: "50%", width: w + "%" } : { right: "50%", width: w + "%" }} />
-                    </div>
-                    <div className="pf-bmeta">
-                      {r.s.n} {r.s.n === 1 ? "day" : "days"} · {pct(r.s.winRate)} win · PF {pfText(r.s.pf)} · {r.s.green}/{r.s.n} green
-                    </div>
-                    <div className={"pf-bval " + tone(r.s.net)}>{fmt(r.s.net)}</div>
-                    <div className="pf-bmeta">
-                      {r.s.trades} {r.s.trades === 1 ? "trade" : "trades"}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {(bestWeek || worstWeek) && (
-              <div className="pf-insights">
-                {bestWeek && (
-                  <div className="pf-insight pos">
-                    Week {bestWeek.w} ({bestWeek.range}) was your best: {fmt(bestWeek.s.net)} across {bestWeek.s.n} {bestWeek.s.n === 1 ? "day" : "days"}.
-                  </div>
-                )}
-                {worstWeek && (
-                  <div className="pf-insight neg">
-                    Week {worstWeek.w} ({worstWeek.range}) hurt the most: {fmt(worstWeek.s.net)}. Look at what changed that week: size, overtrading, or skipped rules.
-                  </div>
-                )}
-              </div>
-            )}
           </>
         )}
 
-        {/* week-of-month pattern */}
-        {weekPattern.length > 0 && (
+        {/* week of the month */}
+        <h2 className="pf-section">Week of the month<span className="pf-sub">which week pays best</span></h2>
+        <div className="pf-seg" role="group" aria-label="Week-of-month range">
+          <button className={weekScope === "year" ? "on" : ""} onClick={() => setWeekScope("year")}>{yearKey}</button>
+          <button className={weekScope === "all" ? "on" : ""} onClick={() => setWeekScope("all")}>All time</button>
+        </div>
+
+        {weekData.active === 0 ? (
+          <div className="pf-card pf-empty">
+            No trading days logged for {weekScope === "year" ? yearKey : "any period"} yet. Each logged day adds to its week of the month here.
+          </div>
+        ) : (
           <>
-            <h2 className="pf-section">Which week pays?<span className="pf-sub">avg per week, all months</span></h2>
-            <div className="pf-card">
-              {weekPattern.map((x) => {
-                const w = (Math.abs(x.avg) / patMax) * 50;
-                const isBest = patBest && x.w === patBest.w && x.avg > 0;
-                const isWorst = patWorst && x.w === patWorst.w && x.avg < 0;
+            <div className="pf-card"><WeekChart rows={weekData.rows} fmt={fmt} /></div>
+
+            <div className="pf-wk-grid">
+              {weekData.rows.map((r) => {
+                const isBest = weekData.best && weekData.best.id === r.id;
+                const isWorst = weekData.worst && weekData.worst.id === r.id;
                 return (
-                  <div className={"pf-wrank" + (isBest ? " gold" : isWorst ? " low" : "")} key={x.w}>
-                    <div className="pf-wrank-head">
-                      <span className="pf-wrank-rank">{x.w}</span>
-                      <div className="pf-wrank-title">
-                        <b>Week {x.w}</b>
-                        <span>{x.weeks} {x.weeks === 1 ? "week" : "weeks"} on record</span>
-                      </div>
+                  <div key={r.id} className={"pf-wk" + (isBest ? " best" : isWorst ? " worst" : "")}>
+                    <div className="pf-wk-top">
+                      <b>{r.label}</b>
                       {isBest && <span className="pf-tag pos">Best</span>}
                       {isWorst && <span className="pf-tag neg">Worst</span>}
                     </div>
-                    <div className="pf-bbar" aria-hidden="true">
-                      <div className="pf-baxis" />
-                      <div className={"pf-bfill " + (x.avg >= 0 ? "pos" : "neg")}
-                        style={x.avg >= 0 ? { left: "50%", width: w + "%" } : { right: "50%", width: w + "%" }} />
+                    <div className="pf-wk-span">Days {r.span}</div>
+                    <div className={"pf-wk-net " + tone(r.net)}>{r.n ? fmt(r.net) : "\u2014"}</div>
+                    <span className="pf-wk-share">{shareText(r)}</span>
+                    <div className="pf-wk-meta">
+                      <div><span>Win rate</span><b>{pct(r.s.winRate)}</b></div>
+                      <div><span>Green days</span><b>{r.n ? `${r.s.green} of ${r.n}` : "\u2014"}</b></div>
+                      <div><span>Avg / day</span><b className={tone(r.avgDay || 0)}>{r.avgDay == null ? "\u2014" : fmt(r.avgDay)}</b></div>
                     </div>
-                    <div className="pf-bmeta">
-                      {x.profitable} of {x.weeks} profitable · {pct(x.s.winRate)} win · total {fmt(x.net)}
-                    </div>
-                    <div className={"pf-bval " + tone(x.avg)}>{fmt(x.avg)}</div>
-                    <div className="pf-bmeta">avg / week</div>
                   </div>
                 );
               })}
             </div>
 
-            <div className="pf-insight note">
-              {weekPattern.every((x) => x.weeks >= 3)
-                ? "average net per week · weeks run Mon–Fri"
-                : "small sample: a week position needs 3+ months before it means much"}
-            </div>
+            {weekInsights.length > 0 && (
+              <div className="pf-insights">
+                {weekInsights.map((it, i) => (
+                  <div key={i} className={"pf-insight " + it.tone}>{it.text}</div>
+                ))}
+              </div>
+            )}
           </>
         )}
 
@@ -901,21 +892,22 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .pf-insight.neg{background:var(--rose-dim);border-color:transparent;}
 .pf-insight.note{color:var(--muted);font-size:12px;}
 
-/* weekly ranking */
-.pf-wrow{display:grid;grid-template-columns:30px 1fr 84px;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);}
-.pf-wrow:last-of-type{border-bottom:none;}
-.pf-wrank{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:800;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);font-variant-numeric:tabular-nums;}
-.pf-wrank.gold{background:var(--btn);color:var(--on-accent);border-color:transparent;}
-.pf-wrank.low{background:var(--rose-dim);color:var(--rose);border-color:transparent;}
-.pf-wmid{min-width:0;}
-.pf-wtitle{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:7px;}
-.pf-wtitle b{font-size:13.5px;font-weight:700;}
-.pf-wtitle span{font-size:11px;color:var(--muted);}
-.pf-wtitle .pf-tag-in{position:static;color:inherit;}
-.pf-wtitle .pf-tag.pos{color:var(--teal);}
-.pf-wtitle .pf-tag.neg{color:var(--rose);}
-.pf-wmeta{font-size:10.5px;color:var(--muted);margin-top:6px;line-height:1.35;font-variant-numeric:tabular-nums;}
-.pf-wnum{text-align:right;}
+/* week of the month */
+.pf-wk-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;}
+.pf-wk{position:relative;min-width:0;background:var(--surface);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--border);box-shadow:var(--shadow-card);border-radius:22px;padding:14px 16px;}
+.pf-wk.best{border-color:rgba(11,143,80,.45);box-shadow:var(--shadow-card),0 0 0 3px var(--teal-dim);}
+.pf-wk.worst{border-color:rgba(214,60,51,.4);box-shadow:var(--shadow-card),0 0 0 3px var(--rose-dim);}
+.pf-wk-top{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:20px;}
+.pf-wk-top b{font-size:14px;font-weight:800;letter-spacing:-.01em;}
+.pf-wk-top .pf-tag{position:static;}
+.pf-wk-span{font-size:11px;color:var(--muted);margin-top:2px;}
+.pf-wk-net{font-size:24px;font-weight:800;letter-spacing:-.03em;line-height:1;margin-top:12px;font-variant-numeric:tabular-nums;}
+.pf-wk-share{display:inline-block;margin-top:9px;font-size:11px;font-weight:700;color:var(--accent-text);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-pill);padding:3px 9px;}
+.pf-wk-meta{margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:grid;gap:6px;}
+.pf-wk-meta div{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:11.5px;color:var(--muted);}
+.pf-wk-meta b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums;}
+.pf-wk-meta b.pos{color:var(--teal);}
+.pf-wk-meta b.neg{color:var(--rose);}
 
 /* tables + lists */
 .pf-table{padding:8px 10px;}
@@ -937,6 +929,7 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 @media (max-width:420px){
   .pf-brow{grid-template-columns:78px 1fr 70px;}
   .pf-kpi-v{font-size:23px;}
-  .pf-wrow{grid-template-columns:26px 1fr 72px;gap:10px;}
+  .pf-wk-net{font-size:21px;}
+  .pf-wk{padding:12px 13px;}
 }
 `;
