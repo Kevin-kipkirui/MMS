@@ -620,6 +620,23 @@ export default function Session({ onOpenSummit, onOpenPerformance } = {}) {
 
   const [theme, setTheme] = useLocalStorageState("td_theme", "dark");
   const [follow, setFollow] = useLocalStorageState("td_follow", true);
+
+  useEffect(() => {
+    const sync = () => {
+      const t = readLS("td_theme", "dark");
+      if (t === "light" || t === "dark") setTheme(t);
+    };
+    window.addEventListener("focus", sync);
+    window.addEventListener("storage", sync);
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      window.removeEventListener("focus", sync);
+      window.removeEventListener("storage", sync);
+      document.removeEventListener("visibilitychange", sync);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [maxLoss, setMaxLoss] = useLocalStorageState("td_maxLoss", 160);
   const [tradeLimit, setTradeLimit] = useLocalStorageState("td_tradeLimit", 6);
   const [currency, setCurrency] = useLocalStorageState("td_currency", "$");

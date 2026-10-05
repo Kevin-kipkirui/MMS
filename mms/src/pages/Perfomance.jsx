@@ -25,6 +25,11 @@ function readLS(key, fallback) {
   }
 }
 
+// Shared with Session.jsx: it stores the theme under "td_theme" as "dark" | "light"
+function readTheme() {
+  return readLS("td_theme", "dark") === "light" ? "light" : "dark";
+}
+
 // Must match Session.jsx
 const BE_LIMIT = 10;
 const isBE = (v) => Math.abs(v) < BE_LIMIT;
@@ -468,10 +473,15 @@ export default function Performance({ onBack } = {}) {
   const [monthKey, setMonthKey] = useState(() => todayKey().slice(0, 7));
   const [scope, setScope] = useState("all"); // "all" | "month" (for the time analysis)
   const [weekScope, setWeekScope] = useState("year"); // "year" | "all" (for week-of-month)
+  const [theme, setTheme] = useState(readTheme);
 
   // refresh when the tab regains focus or another tab writes to storage
+  // (also re-reads the theme so it stays in sync with Session)
   useEffect(() => {
-    const bump = () => setTick((t) => t + 1);
+    const bump = () => {
+      setTick((t) => t + 1);
+      setTheme(readTheme());
+    };
     window.addEventListener("focus", bump);
     window.addEventListener("storage", bump);
     return () => {
@@ -544,6 +554,16 @@ export default function Performance({ onBack } = {}) {
     }
   };
 
+  const toggleTheme = () => {
+    const next = theme === "light" ? "dark" : "light";
+    setTheme(next);
+    try {
+      window.localStorage.setItem("td_theme", JSON.stringify(next)); // same key Session uses
+    } catch (e) {
+      /* ignore privacy-mode errors */
+    }
+  };
+
   const pickMonth = (k) => {
     setMonthKey(k);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
@@ -563,13 +583,16 @@ export default function Performance({ onBack } = {}) {
   const tone = (v) => (v > 0 ? "pos" : v < 0 ? "neg" : "");
 
   return (
-    <div className="pf-root">
+    <div className="pf-root" data-theme={theme}>
       <style>{CSS}</style>
       <div className="pf-wrap">
         {/* header */}
         <header className="pf-top">
           <button className="pf-back" onClick={goBack} aria-label="Back to The Session">{"\u2039"} Session</button>
           <h1>Performance</h1>
+          <button className="pf-theme" onClick={toggleTheme} aria-label="Toggle theme">
+            {theme === "light" ? "🌙 Dark" : "☀️ Light"}
+          </button>
         </header>
 
         {/* month chips */}
@@ -789,6 +812,38 @@ export default function Performance({ onBack } = {}) {
 // ---------- scoped styles (light blue glass, matches Session light mode) ----------
 const CSS = `
 .pf-root{
+/* ===== DARK: obsidian navy / champagne gold (matches Session) ===== */
+--bg-grad:linear-gradient(180deg,#0c1124 0%,#080b17 42%,#04060d 100%);
+--surface:linear-gradient(180deg,rgba(255,255,255,.06) 0%,rgba(255,255,255,0) 42%),linear-gradient(160deg,rgba(26,34,58,.86),rgba(11,15,29,.94));
+--surface-2:rgba(255,255,255,.055);
+--border:rgba(190,205,255,.10);
+--text:#f5f7fc; --muted:#8b94ad;
+--amber:#e8c97a; --amber-dim:rgba(232,201,122,.16);
+--accent-text:#f1d98f;
+--teal:#34e0a1; --teal-dim:rgba(52,224,161,.14);
+--rose:#ff6b7d; --rose-dim:rgba(255,107,125,.15);
+--warn:#f2b45c; --warn-dim:rgba(242,180,92,.17);
+--on-accent:#1b1407;
+--focus-ring:#e8c97a;
+--orb-1:rgba(232,201,122,.13); --orb-2:rgba(64,104,255,.20); --orb-3:rgba(150,170,255,.07);
+--hero:linear-gradient(155deg,#25356a 0%,#16224a 48%,#0a1028 100%);
+--hero-shadow:0 1px 0 rgba(255,255,255,.16) inset,0 30px 60px -26px rgba(0,0,0,.95),0 0 40px -10px rgba(232,201,122,.12);
+--hero-ink:#0a1028;
+--btn:linear-gradient(180deg,#f6e0a2,#c99f48);
+--modal-bg:#0d1326;
+--blur:blur(18px) saturate(130%);
+--shadow-card:0 1px 0 rgba(255,255,255,.08) inset,0 22px 46px -22px rgba(0,0,0,.95);
+--glow-amber:rgba(232,201,122,.30);
+--r-card:26px; --r-input:14px; --r-pill:999px;
+
+padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+box-sizing:border-box; min-height:100vh; position:relative;
+background:var(--bg-grad); background-attachment:fixed;
+color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
+-webkit-font-smoothing:antialiased;
+}
+.pf-root[data-theme="light"]{
+/* ===== LIGHT: blue glass (unchanged) ===== */
 --bg-grad:linear-gradient(180deg,#d6e2f7 0%,#bfd0ee 50%,#a9bee4 100%);
 --surface:linear-gradient(160deg,rgba(255,255,255,.80),rgba(224,235,252,.58));
 --surface-2:rgba(255,255,255,.62);
@@ -810,13 +865,6 @@ const CSS = `
 --blur:blur(18px) saturate(120%);
 --shadow-card:0 1px 0 rgba(255,255,255,.95) inset,0 18px 38px -20px rgba(38,72,150,.4);
 --glow-amber:rgba(233,169,42,.42);
---r-card:26px; --r-input:14px; --r-pill:999px;
-
-padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
-box-sizing:border-box; min-height:100vh; position:relative;
-background:var(--bg-grad); background-attachment:fixed;
-color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
--webkit-font-smoothing:antialiased;
 }
 .pf-root::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
   background:
@@ -944,4 +992,32 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
   .pf-wk-net{font-size:21px;}
   .pf-wk{padding:12px 13px;}
 }
+
+/* ---------- theme toggle ---------- */
+.pf-theme{margin-left:auto;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);border-radius:var(--r-pill);padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);transition:all .18s ease;}
+.pf-theme:hover{border-color:var(--amber);color:var(--text);}
+
+/* ---------- dark-only: obsidian & gold details ---------- */
+.pf-root:not([data-theme="light"])::after{
+  content:""; position:fixed; left:0; right:0; top:0; height:360px; pointer-events:none; z-index:0;
+  background-image:
+    radial-gradient(520px 200px at 50% -40px,rgba(232,201,122,.14),transparent 70%),
+    linear-gradient(rgba(190,205,255,.028) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(190,205,255,.028) 1px,transparent 1px);
+  background-size:100% 100%,34px 34px,34px 34px;
+  -webkit-mask-image:linear-gradient(180deg,#000 0%,transparent 100%);
+  mask-image:linear-gradient(180deg,#000 0%,transparent 100%);
+}
+.pf-root:not([data-theme="light"]) .pf-hero{border-color:rgba(232,201,122,.30);}
+.pf-root:not([data-theme="light"]) .pf-hero::after{background:radial-gradient(420px 220px at 100% -10%,rgba(232,201,122,.22),transparent 65%);}
+.pf-root:not([data-theme="light"]) .pf-top h1{
+  background:linear-gradient(180deg,#ffffff 20%,#c3cce6 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;
+}
+.pf-root:not([data-theme="light"]) .pf-bfill.pos{background:linear-gradient(90deg,rgba(52,224,161,.35),var(--teal));}
+.pf-root:not([data-theme="light"]) .pf-bfill.neg{background:linear-gradient(270deg,rgba(255,107,125,.35),var(--rose));}
+.pf-root:not([data-theme="light"]) .pf-wk.best{border-color:rgba(52,224,161,.45);}
+.pf-root:not([data-theme="light"]) .pf-wk.worst{border-color:rgba(255,107,125,.4);}
+.pf-root:not([data-theme="light"]) .pf-mchip.on,
+.pf-root:not([data-theme="light"]) .pf-seg button.on{box-shadow:0 8px 18px -8px rgba(232,201,122,.5);}
 `;
