@@ -159,6 +159,144 @@ function formatCountdown(mins) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+// ---------- daily goal helpers ----------
+const GOAL_CHECK_MIN = M(16, 30); // 4:30 PM check-in
+
+const GOAL_MSGS = {
+  hit: [
+    "Target smashed. Discipline paid you today, now close the platform and enjoy it.",
+    "You executed the plan and the plan delivered. That's how consistency is built.",
+    "Goal reached. Protect it: no extra trades, no giving it back.",
+    "This is what patience looks like in numbers. Well earned.",
+    "Green day, on your terms. Log it, learn from it, repeat it.",
+    "You waited for A+ setups and got paid for it. Take the win.",
+    "Another day of proof that the process works. Proud of this one.",
+  ],
+  half: [
+    "You were {d} short. More than halfway there is a solid day, not a failure.",
+    "{d} away from the goal. You're in profit and the account is safe. That counts.",
+    "Past the halfway mark with discipline intact. Tomorrow's goal is within reach.",
+    "So close, only {d} off. Don't chase it now. Let the plan finish the job tomorrow.",
+    "Net {n} against a {t} goal. Good progress. Review what worked and run it back.",
+    "{d} to go, and you didn't force anything to get here. That's a win in itself.",
+  ],
+  low: [
+    "You needed {d} to reach your goal. Smaller days still protect your capital.",
+    "{d} short today. Not every session pays in full, but you showed up with a plan.",
+    "Goal missed by {d}. Review your best setup of the day and build tomorrow around it.",
+    "A quiet one. {d} to the goal, and zero damage done. Reset and come back sharp.",
+    "Progress isn't always loud. Note what the market gave you today and move on.",
+    "{d} off target. The edge plays out over many days, not just this one.",
+  ],
+  red: [
+    "You needed {d} to reach your goal. Red days happen to every trader. Stopping on time is the skill.",
+    "Tough session. Close the charts, step away, and don't try to win it back today.",
+    "The goal was {d} away, but your next trade isn't tied to this one. Fresh start tomorrow.",
+    "Losses are tuition. Write down the one lesson and let the rest go.",
+    "A red day doesn't define you. How you respond to it does. Rest up.",
+    "Your capital is your business. Protect it today and the goal will come back around.",
+    "Every great trader has days like this. Review calmly, reset fully, return stronger.",
+  ],
+};
+
+function pickGoalMsg(kind) {
+  const pool = GOAL_MSGS[kind];
+  const key = "td_goalMsg_" + kind;
+  const last = readLS(key, -1);
+  let i = Math.floor(Math.random() * pool.length);
+  if (pool.length > 1 && i === last) i = (i + 1) % pool.length; // never the same twice in a row
+  writeLS(key, i);
+  return pool[i];
+}
+
+function buildGoalPopup(kind, target, net, money, fmt) {
+  const d = money(Math.max(0, target - net));
+  const msg = pickGoalMsg(kind)
+    .replace(/{d}/g, d)
+    .replace(/{n}/g, fmt(net))
+    .replace(/{t}/g, money(target));
+  if (kind === "hit") {
+    return { kind, emoji: "🏆", kicker: "Daily target hit", title: "Congratulations!", figure: fmt(net), sub: "Today's goal: " + money(target), msg };
+  }
+  if (kind === "half") {
+    return { kind, emoji: "🔥", kicker: "4:30 PM check-in", title: "So close!", figure: d, sub: "left to reach your goal", msg };
+  }
+  if (kind === "low") {
+    return { kind, emoji: "🌱", kicker: "4:30 PM check-in", title: "Day's almost done", figure: d, sub: "left to reach your goal", msg };
+  }
+  return { kind, emoji: "💙", kicker: "4:30 PM check-in", title: "Tough day, stay steady", figure: d, sub: "was needed to reach your goal (net " + fmt(net) + ")", msg };
+}
+
+const CONFETTI_COLORS = ["#8dffc0", "#ffd36b", "#7ab6ff", "#ff9ab0", "#ffffff", "#c9a6ff"];
+
+function Confetti() {
+  const pieces = useMemo(
+    () =>
+      Array.from({ length: 56 }, () => ({
+        left: Math.random() * 100,
+        delay: Math.random() * 0.9,
+        dur: 2.6 + Math.random() * 2.2,
+        size: 6 + Math.random() * 8,
+        dx: Math.round((Math.random() - 0.5) * 160),
+        color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+        round: Math.random() > 0.6,
+      })),
+    []
+  );
+  return (
+    <div className="ts-confetti">
+      {pieces.map((p, i) => (
+        <span
+          key={i}
+          style={{
+            left: p.left + "%",
+            width: p.size,
+            height: p.round ? p.size : p.size * 1.6,
+            background: p.color,
+            borderRadius: p.round ? "50%" : "2px",
+            animationDelay: p.delay + "s",
+            animationDuration: p.dur + "s",
+            "--dx": p.dx + "px",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function GoalPopup({ popup, onClose }) {
+  if (!popup) return null;
+  const hit = popup.kind === "hit";
+  return (
+    <>
+      {hit && <Confetti />}
+
+      <div
+        className={`ts-modal ts-goal ${popup.kind}`}
+        role="alertdialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="ts-emoji">{popup.emoji}</div>
+
+        <div className="ts-kicker">{popup.kicker}</div>
+
+        <h1>{popup.title}</h1>
+
+        <div className="ts-figure">{popup.figure}</div>
+
+        <div className="ts-sub">{popup.sub}</div>
+
+        <p className="ts-msg">{popup.msg}</p>
+
+        <button onClick={onClose} className="ts-btn-primary">
+          {hit ? "Let's go 🔥" : "Got it"}
+        </button>
+      </div>
+    </>
+  );
+}
+
 // ---------- presentational helpers (module scope, no logic) ----------
 // Fades the decimals of a money string: "+$1,286.28" -> "+$1,286" + faded ".28"
 function DimMoney({ text }) {
@@ -358,16 +496,18 @@ function NextUpCard({ nextBlock, minsUntil }) {
   );
 }
 
-function EditLimitModal({ mode, maxLoss, currency, tradeLimit, onClose, onSaveLoss, onSaveCap }) {
+function EditLimitModal({ mode, maxLoss, currency, tradeLimit, dailyTarget, onClose, onSaveLoss, onSaveCap, onSaveGoal }) {
   const [lossVal, setLossVal] = useState(String(maxLoss));
   const [curVal, setCurVal] = useState(currency);
   const [capVal, setCapVal] = useState(String(tradeLimit));
+  const [goalVal, setGoalVal] = useState(String(dailyTarget));
 
   useEffect(() => {
     setLossVal(String(maxLoss));
     setCurVal(currency);
     setCapVal(String(tradeLimit));
-  }, [mode, maxLoss, currency, tradeLimit]);
+    setGoalVal(String(dailyTarget));
+  }, [mode, maxLoss, currency, tradeLimit, dailyTarget]);
 
   if (!mode) return null;
 
@@ -377,6 +517,9 @@ function EditLimitModal({ mode, maxLoss, currency, tradeLimit, onClose, onSaveLo
       if (!isNaN(n) && n > 0) {
         onSaveLoss(Math.abs(n), curVal.trim() ? curVal.trim().slice(0, 4) : currency);
       }
+    } else if (mode === "goal") {
+      const n = parseFloat(goalVal);
+      if (!isNaN(n) && n >= 0) onSaveGoal(n); // 0 turns the goal off
     } else {
       const n = parseInt(capVal, 10);
       if (!isNaN(n)) onSaveCap(Math.max(1, n));
@@ -384,27 +527,27 @@ function EditLimitModal({ mode, maxLoss, currency, tradeLimit, onClose, onSaveLo
     onClose();
   };
 
+  const title =
+    mode === "loss" ? "Set today's loss floor"
+    : mode === "goal" ? "Set your daily profit goal"
+    : "Set today's trade cap";
+  const sub =
+    mode === "loss" ? "The most you're willing to be down today, set now while calm."
+    : mode === "goal" ? "Hit it and you'll get a celebration. Miss it and you'll get a 4:30 PM check-in. Enter 0 to turn it off."
+    : "The most trades you'll take today, set now while calm.";
+
   return (
     <div className="ts-modal-backdrop" onClick={onClose}>
       <div className="ts-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="ts-modal-title">
-          {mode === "loss" ? "Set today's loss floor" : "Set today's trade cap"}
-        </div>
-        <div className="ts-modal-sub">
-          {mode === "loss"
-            ? "The most you're willing to be down today, set now while calm."
-            : "The most trades you'll take today, set now while calm."}
-        </div>
+        <div className="ts-modal-title">{title}</div>
+        <div className="ts-modal-sub">{sub}</div>
 
         {mode === "loss" ? (
           <div className="ts-modal-row">
             <div className="ts-modal-field" style={{ flex: 2 }}>
               <label>Max loss</label>
               <input
-                type="number"
-                min="0"
-                step="0.01"
-                autoFocus
+                type="number" min="0" step="0.01" autoFocus
                 value={lossVal}
                 onChange={(e) => setLossVal(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
@@ -413,22 +556,28 @@ function EditLimitModal({ mode, maxLoss, currency, tradeLimit, onClose, onSaveLo
             <div className="ts-modal-field" style={{ flex: 1 }}>
               <label>Currency</label>
               <input
-                type="text"
-                maxLength={4}
+                type="text" maxLength={4}
                 value={curVal}
                 onChange={(e) => setCurVal(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
               />
             </div>
           </div>
+        ) : mode === "goal" ? (
+          <div className="ts-modal-field">
+            <label>Daily profit goal</label>
+            <input
+              type="number" min="0" step="0.01" autoFocus
+              value={goalVal}
+              onChange={(e) => setGoalVal(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
+            />
+          </div>
         ) : (
           <div className="ts-modal-field">
             <label>Trade cap</label>
             <input
-              type="number"
-              min="1"
-              step="1"
-              autoFocus
+              type="number" min="1" step="1" autoFocus
               value={capVal}
               onChange={(e) => setCapVal(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
@@ -509,6 +658,10 @@ export default function Session({ onOpenSummit, onOpenPerformance } = {}) {
   const [dockActive, setDockActive] = useState("home"); // visual only
   // ids of news events whose "30 minutes to go" popup has already been shown/dismissed today
   const [alerted, setAlerted] = useLocalStorageState("td_alerted_" + todayKey(), []);
+  const [dailyTarget, setDailyTarget] = useLocalStorageState("td_dailyTarget", 100);
+  const [goalCelebrated, setGoalCelebrated] = useLocalStorageState("td_goalCelebrated_" + todayKey(), false);
+  const [goalEvaluated, setGoalEvaluated] = useLocalStorageState("td_goalEvaluated_" + todayKey(), false);
+  const [goalPopup, setGoalPopup] = useState(null);
 
   const pnlInputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -720,6 +873,8 @@ export default function Session({ onOpenSummit, onOpenPerformance } = {}) {
   const losses = day.pnl.filter((v) => v <= -BE_LIMIT).length;
   const breakevens = day.pnl.filter(isBreakEven).length;
   const usedFraction = Math.min(1, Math.max(0, -netPnl) / maxLoss);
+  const goalPct = dailyTarget > 0 ? Math.max(0, Math.min(100, (netPnl / dailyTarget) * 100)) : 0;
+  const goalHit = dailyTarget > 0 && netPnl >= dailyTarget;
 
   const sortedNews = useMemo(
     () => day.news.slice().sort((a, b) => (toMin(a.time) ?? 1e9) - (toMin(b.time) ?? 1e9)),
@@ -824,6 +979,27 @@ export default function Session({ onOpenSummit, onOpenPerformance } = {}) {
       navigator.vibrate([200, 100, 200]);
     }
   }, [pendingAlertId]);
+
+  // ---------- daily goal: celebration + 4:30 PM check-in ----------
+  useEffect(() => {
+    if (goalPopup) return;
+    if (!(hydrated || syncState === "offline")) return; // wait for data to load
+    if (!(dailyTarget > 0) || !isWeekday(todayKey())) return;
+
+    if (!goalCelebrated && netPnl >= dailyTarget) {
+      setGoalCelebrated(true);
+      setGoalPopup(buildGoalPopup("hit", dailyTarget, netPnl, money, fmt));
+      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([120, 60, 120, 60, 240]);
+      return;
+    }
+
+    if (!goalCelebrated && !goalEvaluated && nowMin >= GOAL_CHECK_MIN) {
+      setGoalEvaluated(true);
+      const kind = netPnl < 0 ? "red" : netPnl >= dailyTarget / 2 ? "half" : "low";
+      setGoalPopup(buildGoalPopup(kind, dailyTarget, netPnl, money, fmt));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [netPnl, nowMin, dailyTarget, goalCelebrated, goalEvaluated, goalPopup, hydrated, syncState]);
 
   // ---------- scroll-to-now ----------
   const scrollToNow = useCallback(
@@ -931,6 +1107,7 @@ export default function Session({ onOpenSummit, onOpenPerformance } = {}) {
 
   const openLossEdit = () => setEditModal("loss");
   const openCapEdit = () => setEditModal("cap");
+  const openGoalEdit = () => setEditModal("goal");
 
   const startEditTarget = () => {
     setTargetInput(String(monthlyTarget));
@@ -1027,6 +1204,9 @@ export default function Session({ onOpenSummit, onOpenPerformance } = {}) {
     setDay({ checks: {}, energy: null, pnl: [], times: [], news: [] });
     setLogForm({ missed: "", note: "" });
     setAlerted([]);
+    setGoalCelebrated(false);
+    setGoalEvaluated(false);
+    setGoalPopup(null);
   };
 
   const goToSection = (key, id) => {
@@ -1252,6 +1432,34 @@ export default function Session({ onOpenSummit, onOpenPerformance } = {}) {
               )}
             </div>
           </div>
+        </div>
+
+        <div className={`counter goalcard${goalHit ? " hit" : ""}`}>
+          <div className="label">
+            <span>Daily profit goal</span>
+            <button className="limitset" onClick={openGoalEdit}>{dailyTarget > 0 ? "edit goal" : "set goal"}</button>
+          </div>
+          {dailyTarget > 0 ? (
+            <>
+              <div className="row">
+                <div>
+                  <span className={`num${netPnl > 0 ? " pos" : netPnl < 0 ? " neg" : ""}`}><DimMoney text={fmt(netPnl)} /></span>{" "}
+                  <span className="maxof">/ {money(dailyTarget)}</span>
+                </div>
+                <span className="goalpct">{Math.round(goalPct)}%</span>
+              </div>
+              <div className="pnl-meter">
+                <div className={`pnl-meter-fill goalfill${goalHit ? " hit" : ""}`} style={{ width: goalPct + "%" }} />
+              </div>
+              <div className="pnl-meterlbl">
+                {goalHit
+                  ? "Goal reached. Protect the day and stop on time."
+                  : `${money(dailyTarget - netPnl)} to go today. Check-in at 4:30 PM.`}
+              </div>
+            </>
+          ) : (
+            <div className="pnl-meterlbl">No goal set. Tap "set goal" to add one.</div>
+          )}
         </div>
 
         <h2 className="section" id="ts-news">Today's news<span className="sub">fill this in before 11:00, not after a bad trade</span></h2>
@@ -1600,14 +1808,18 @@ export default function Session({ onOpenSummit, onOpenPerformance } = {}) {
         </div>
       )}
 
+      <GoalPopup popup={goalPopup} onClose={() => setGoalPopup(null)} />
+
       <EditLimitModal
         mode={editModal}
         maxLoss={maxLoss}
         currency={currency}
         tradeLimit={tradeLimit}
+        dailyTarget={dailyTarget}
         onClose={() => setEditModal(null)}
         onSaveLoss={(v, c) => { setMaxLoss(v); setCurrency(c); }}
         onSaveCap={(v) => setTradeLimit(v)}
+        onSaveGoal={(v) => setDailyTarget(v)}
       />
     </div>
   );
@@ -1994,4 +2206,40 @@ mask-image:linear-gradient(180deg,#000 0%,transparent 100%);
 .ts-alert-rule{display:inline-block;margin:14px 0 18px;padding:6px 14px;border-radius:999px;font-size:12px;font-weight:700;background:var(--surface-2);border:1px solid var(--border);}
 .ts-alert-btn{width:100%;}
 @media (prefers-reduced-motion:reduce){.ts-alert,.ts-alert-icon{animation:none;}}
+
+/* ---------- daily goal card ---------- */
+.ts-root .goalcard{margin-top:12px;margin-bottom:8px;}
+.ts-root .goalcard .num{font-size:34px;}
+.ts-root .goalcard.hit{border-color:var(--teal);box-shadow:var(--shadow-card),0 0 26px 2px var(--teal-dim);}
+.ts-root .goalpct{font-size:13px;font-weight:800;color:var(--muted);font-variant-numeric:tabular-nums;}
+.ts-root .goalcard.hit .goalpct{color:var(--teal);}
+.ts-root .pnl-meter-fill.goalfill{background:var(--meter);}
+.ts-root .pnl-meter-fill.goalfill.hit{background:linear-gradient(90deg,#3fdc8c,#8dffc0);}
+
+/* ---------- goal popup ---------- */
+.ts-goal-backdrop{align-items:center;padding:20px;z-index:120;}
+.ts-goal{border-radius:28px;text-align:center;max-width:380px;padding:28px 24px 22px;animation:ts-alert-pop .3s cubic-bezier(.2,1.2,.4,1);}
+.ts-goal-emoji{font-size:54px;line-height:1;margin-bottom:10px;animation:ts-goal-bounce 1.2s ease-in-out infinite;}
+@keyframes ts-goal-bounce{0%,100%{transform:translateY(0) scale(1);}50%{transform:translateY(-8px) scale(1.12);}}
+.ts-goal-kicker{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+.ts-goal-title{font-size:24px;font-weight:800;letter-spacing:-.025em;margin-bottom:10px;}
+.ts-goal-figure{font-size:40px;font-weight:800;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums;}
+.ts-goal-sub{font-size:12.5px;color:var(--muted);margin-top:6px;}
+.ts-goal-msg{font-size:14px;line-height:1.5;margin:16px 0 20px;}
+.ts-goal.hit{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal) inset,0 0 44px 4px var(--teal-dim);}
+.ts-goal.hit .ts-goal-kicker,.ts-goal.hit .ts-goal-figure{color:var(--teal);}
+.ts-goal.half .ts-goal-figure{color:var(--warn);}
+.ts-goal.low .ts-goal-figure{color:var(--text);}
+.ts-goal.red .ts-goal-figure{color:var(--rose);}
+.ts-goal-btn{width:100%;}
+
+/* ---------- confetti ---------- */
+.ts-confetti{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:130;}
+.ts-confetti span{position:absolute;top:-24px;opacity:0;animation-name:ts-confetti-fall;animation-timing-function:cubic-bezier(.25,.6,.4,1);animation-fill-mode:forwards;}
+@keyframes ts-confetti-fall{
+  0%{opacity:1;transform:translate3d(0,0,0) rotate(0deg);}
+  85%{opacity:1;}
+  100%{opacity:0;transform:translate3d(var(--dx),108vh,0) rotate(720deg);}
+}
+@media (prefers-reduced-motion:reduce){.ts-confetti{display:none;}.ts-goal,.ts-goal-emoji{animation:none;}}
 `;
