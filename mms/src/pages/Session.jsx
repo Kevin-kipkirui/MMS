@@ -1229,7 +1229,7 @@ export default function Session({ onOpenSummit, onOpenPerformance } = {}) {
         style={{
           position: "fixed",
           inset: 0,
-          background: "#070b12",
+          background: "#080b17",
         }}
         aria-busy="true"
       />
@@ -1828,31 +1828,31 @@ export default function Session({ onOpenSummit, onOpenPerformance } = {}) {
 // ---------- scoped styles ----------
 const CSS = `
 .ts-root{
-/* ===== DARK: graphite / silver (Proton Pass style) ===== */
---bg-grad:linear-gradient(180deg,#1c1c1e 0%,#0f0f10 38%,#070708 100%);
---surface:linear-gradient(180deg,rgba(255,255,255,.055) 0%,rgba(255,255,255,0) 38%),linear-gradient(160deg,#242426,#161617);
---surface-2:rgba(255,255,255,.06);
---border:rgba(255,255,255,.08);
---text:#f3f3f4; --muted:#8b8b91;
---amber:#e6e6e9; --amber-dim:rgba(255,255,255,.14);
---accent-text:#ffffff;
---teal:#3fdc8c; --teal-dim:rgba(63,220,140,.15);
---rose:#ff5d6c; --rose-dim:rgba(255,93,108,.16);
---warn:#f2b45c; --warn-dim:rgba(242,180,92,.18);
---on-accent:#111113;
---focus-ring:#d9d9dd;
---orb-1:rgba(200,200,208,.20); --orb-2:rgba(120,120,128,.14); --orb-3:rgba(255,255,255,.05);
---hero:linear-gradient(155deg,#4b4b4f 0%,#2b2b2e 48%,#141415 100%);
---hero-shadow:0 1px 0 rgba(255,255,255,.16) inset,0 28px 54px -24px rgba(0,0,0,.9);
---hero-ink:#141415;
---btn:linear-gradient(180deg,#f7f7f8,#b4b4b9);
---meter:linear-gradient(90deg,#8d8d93,#f4f4f5);
---modal-bg:#18181a;
---blur:blur(18px) saturate(120%);
---shadow-card:0 1px 0 rgba(255,255,255,.07) inset,0 20px 44px -20px rgba(0,0,0,.95);
---shadow-card-hover:0 1px 0 rgba(255,255,255,.1) inset,0 24px 48px -18px rgba(0,0,0,1);
---glow-amber:rgba(255,255,255,.22); --glow-rose:rgba(255,93,108,.38);
---dock-bg:rgba(24,24,26,.86);
+/* ===== DARK: obsidian navy / champagne gold ===== */
+--bg-grad:linear-gradient(180deg,#0c1124 0%,#080b17 42%,#04060d 100%);
+--surface:linear-gradient(180deg,rgba(255,255,255,.06) 0%,rgba(255,255,255,0) 42%),linear-gradient(160deg,rgba(26,34,58,.86),rgba(11,15,29,.94));
+--surface-2:rgba(255,255,255,.055);
+--border:rgba(190,205,255,.10);
+--text:#f5f7fc; --muted:#8b94ad;
+--amber:#e8c97a; --amber-dim:rgba(232,201,122,.16);
+--accent-text:#f1d98f;
+--teal:#34e0a1; --teal-dim:rgba(52,224,161,.14);
+--rose:#ff6b7d; --rose-dim:rgba(255,107,125,.15);
+--warn:#f2b45c; --warn-dim:rgba(242,180,92,.17);
+--on-accent:#1b1407;
+--focus-ring:#e8c97a;
+--orb-1:rgba(232,201,122,.13); --orb-2:rgba(64,104,255,.20); --orb-3:rgba(150,170,255,.07);
+--hero:linear-gradient(155deg,#25356a 0%,#16224a 48%,#0a1028 100%);
+--hero-shadow:0 1px 0 rgba(255,255,255,.16) inset,0 30px 60px -26px rgba(0,0,0,.95),0 0 40px -10px rgba(232,201,122,.12);
+--hero-ink:#0a1028;
+--btn:linear-gradient(180deg,#f6e0a2,#c99f48);
+--meter:linear-gradient(90deg,#a07f35,#f6e0a2);
+--modal-bg:#0d1326;
+--blur:blur(18px) saturate(130%);
+--shadow-card:0 1px 0 rgba(255,255,255,.08) inset,0 22px 46px -22px rgba(0,0,0,.95);
+--shadow-card-hover:0 1px 0 rgba(255,255,255,.11) inset,0 26px 50px -18px rgba(0,0,0,1);
+--glow-amber:rgba(232,201,122,.30); --glow-rose:rgba(255,107,125,.38);
+--dock-bg:rgba(11,16,32,.88);
 --r-card:26px; --r-input:14px; --r-pill:999px;
 
 padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
@@ -2167,20 +2167,31 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .ts-root .ddimg img{display:block;width:100%;max-height:240px;object-fit:cover;}
 .ts-lightbox-img{max-width:100%;max-height:88vh;border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.6);}
 
-/* dark-only: Proton Pass details */
+/* dark-only: premium obsidian & gold details */
 .ts-root:not([data-theme="light"])::after{
-content:""; position:fixed; left:0; right:0; top:0; height:340px; pointer-events:none; z-index:0;
-background-image:
-linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),
-linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
-background-size:34px 34px;
--webkit-mask-image:linear-gradient(180deg,#000 0%,transparent 100%);
-mask-image:linear-gradient(180deg,#000 0%,transparent 100%);
+  content:""; position:fixed; left:0; right:0; top:0; height:360px; pointer-events:none; z-index:0;
+  background-image:
+    radial-gradient(520px 200px at 50% -40px,rgba(232,201,122,.14),transparent 70%),
+    linear-gradient(rgba(190,205,255,.028) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(190,205,255,.028) 1px,transparent 1px);
+  background-size:100% 100%,34px 34px,34px 34px;
+  -webkit-mask-image:linear-gradient(180deg,#000 0%,transparent 100%);
+  mask-image:linear-gradient(180deg,#000 0%,transparent 100%);
 }
-.ts-root:not([data-theme="light"]) .ts-target-card{border-color:rgba(255,255,255,.14);}
-.ts-root:not([data-theme="light"]) .ts-target-card::after{background:radial-gradient(420px 220px at 100% -10%,rgba(255,255,255,.2),transparent 65%);}
-.ts-root:not([data-theme="light"]) .ts-dock-btn.active{box-shadow:0 8px 18px -8px rgba(255,255,255,.35);}
-.ts-root:not([data-theme="light"]) .brand h1{font-weight:600;letter-spacing:-.035em;}
+.ts-root:not([data-theme="light"]) .ts-target-card{border-color:rgba(232,201,122,.30);}
+.ts-root:not([data-theme="light"]) .ts-target-card::after{background:radial-gradient(420px 220px at 100% -10%,rgba(232,201,122,.22),transparent 65%);}
+.ts-root:not([data-theme="light"]) .brand h1{
+  font-weight:700;letter-spacing:-.035em;
+  background:linear-gradient(180deg,#ffffff 20%,#c3cce6 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;
+}
+.ts-root:not([data-theme="light"]) .ts-summit-btn{box-shadow:0 8px 20px -10px rgba(232,201,122,.55);}
+.ts-root:not([data-theme="light"]) .theme-toggle:hover{border-color:rgba(232,201,122,.55);}
+.ts-root:not([data-theme="light"]) .block.now{box-shadow:0 0 0 1px var(--amber) inset,0 0 32px 2px rgba(232,201,122,.22);}
+.ts-root:not([data-theme="light"]) .ts-dock{border-color:rgba(232,201,122,.14);box-shadow:0 1px 0 rgba(255,255,255,.1) inset,0 24px 48px -16px rgba(0,0,0,.85);}
+.ts-root:not([data-theme="light"]) .ts-dock-btn.active{box-shadow:0 8px 20px -8px rgba(232,201,122,.55);}
+.ts-root:not([data-theme="light"]) .streak .n{background:linear-gradient(180deg,#f6e0a2,#c99f48);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;}
+.ts-root:not([data-theme="light"]) .goalcard.hit{box-shadow:var(--shadow-card),0 0 30px 2px rgba(52,224,161,.18);}
 
 /* light-theme dock (navy pill, like the reference) */
 .ts-root[data-theme="light"] .ts-dock-btn{color:#b9cbec;}
