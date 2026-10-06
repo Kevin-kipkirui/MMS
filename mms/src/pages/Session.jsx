@@ -706,7 +706,7 @@ function HoloClock() {
 }
 
 // ---------- component ----------
-export default function Session({ onOpenSummit, onOpenPerformance } = {}) {
+export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews } = {}) {
   const [authUser, setAuthUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
 
@@ -1209,6 +1209,13 @@ export default function Session({ onOpenSummit, onOpenPerformance } = {}) {
       window.location.hash = "performance";
     }
   };
+  const handleGoToNews = () => {
+    if (typeof onOpenNews === "function") {
+      onOpenNews();
+    } else if (typeof window !== "undefined") {
+      window.location.hash = "news";
+    }
+  };
 
   const addResult = () => {
     const v = parseFloat(pnlInput);
@@ -1427,6 +1434,9 @@ export default function Session({ onOpenSummit, onOpenPerformance } = {}) {
             </button>
             <button className="theme-toggle ts-perf-btn" onClick={handleGoToPerformance}>
               📈 Performance
+            </button>
+            <button className="theme-toggle ts-perf-btn" onClick={handleGoToNews}>
+              📰 News
             </button>
           </div>
           <div className="clockbox">
