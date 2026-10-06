@@ -609,14 +609,16 @@ const SEG_MAP = {
   5: "afgcd", 6: "afgedc", 7: "abc", 8: "abcdefg", 9: "abcdfg",
 };
 
+const ce = React.createElement;
+
 function HoloDigit({ ch }) {
   const lit = ch == null ? "" : SEG_MAP[ch] || "";
-  return (
-    <svg className="ts-holo-digit" viewBox="0 0 20 36" aria-hidden="true">
-      {Object.keys(SEG_POLY).map((k) => (
-        <polygon key={k} points={SEG_POLY[k]} className={lit.includes(k) ? "on" : "off"} />
-      ))}
-    </svg>
+  return ce(
+    "svg",
+    { className: "ts-holo-digit", width: 19, height: 34, viewBox: "0 0 20 36", "aria-hidden": "true" },
+    Object.keys(SEG_POLY).map((k) =>
+      ce("polygon", { key: k, points: SEG_POLY[k], className: lit.includes(k) ? "on" : "off" })
+    )
   );
 }
 
@@ -628,25 +630,34 @@ function HoloClock() {
     return () => clearInterval(id);
   }, []);
 
-  let h = t.getHours();
-  const ap = h >= 12 ? "PM" : "AM";
-  h = h % 12 || 12;
-  const hh = pad(h);
+  let hr = t.getHours();
+  const ap = hr >= 12 ? "PM" : "AM";
+  hr = hr % 12 || 12;
+  const hh = pad(hr);
   const mm = pad(t.getMinutes());
   const blink = t.getSeconds() % 2 === 0;
 
-  return (
-    <div className="ts-holo" role="timer" aria-label={`${hh}:${mm} ${ap}`}>
-      <HoloDigit ch={hh[0] === "0" ? null : Number(hh[0])} />
-      <HoloDigit ch={Number(hh[1])} />
-      <svg className="ts-holo-colon" width="6" height="27" viewBox="0 0 6 36" aria-hidden="true" style={{ opacity: blink ? 1 : 0.18 }}>
-        <rect x="1" y="8" width="4" height="4" rx="1" fill="currentColor" />
-        <rect x="1" y="24" width="4" height="4" rx="1" fill="currentColor" />
-      </svg>
-      <HoloDigit ch={Number(mm[0])} />
-      <HoloDigit ch={Number(mm[1])} />
-      <span className="ts-holo-meridiem">{ap}</span>
-    </div>
+  return ce(
+    "div",
+    { className: "ts-holo", role: "timer", "aria-label": hh + ":" + mm + " " + ap },
+    ce(HoloDigit, { ch: hh[0] === "0" ? null : Number(hh[0]) }),
+    ce(HoloDigit, { ch: Number(hh[1]) }),
+    ce(
+      "svg",
+      {
+        className: "ts-holo-colon",
+        width: 7,
+        height: 34,
+        viewBox: "0 0 7 36",
+        "aria-hidden": "true",
+        style: { opacity: blink ? 1 : 0.18 },
+      },
+      ce("rect", { x: 1.5, y: 9, width: 4, height: 4, rx: 1 }),
+      ce("rect", { x: 1.5, y: 23, width: 4, height: 4, rx: 1 })
+    ),
+    ce(HoloDigit, { ch: Number(mm[0]) }),
+    ce(HoloDigit, { ch: Number(mm[1]) }),
+    ce("span", { className: "ts-holo-meridiem" }, ap)
   );
 }
 
@@ -2334,34 +2345,29 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .ts-root[data-theme="light"]{--holo-glow:rgba(47,111,196,.50);}
 
 .ts-root .ts-holo{
-position:fixed;
-left:max(18px,calc(50% - 236px));
-bottom:calc(90px + env(safe-area-inset-bottom,0px));
-z-index:44;
-display:flex;align-items:flex-end;gap:5px;
-color:var(--accent-text);
-pointer-events:none;
-filter:drop-shadow(0 0 3px var(--holo-glow)) drop-shadow(0 0 10px var(--holo-glow));
-animation:ts-holo-flicker 7s infinite;
+  position:fixed;
+  right:max(18px,calc(50% - 236px));
+  bottom:calc(90px + env(safe-area-inset-bottom,0px));
+  z-index:44;
+  display:flex;align-items:flex-end;gap:3px;
+  color:var(--accent-text);
+  pointer-events:none;
+  filter:drop-shadow(0 0 3px var(--holo-glow)) drop-shadow(0 0 10px var(--holo-glow));
+  animation:ts-holo-flicker 7s infinite;
 }
-.ts-root .ts-holo-digits{
-display:flex;align-items:flex-end;gap:2px;
-/* faint scanlines for the hologram feel */
--webkit-mask-image:repeating-linear-gradient(0deg,#000 0,#000 2px,rgba(0,0,0,.55) 2px,rgba(0,0,0,.55) 3px);
-mask-image:repeating-linear-gradient(0deg,#000 0,#000 2px,rgba(0,0,0,.55) 2px,rgba(0,0,0,.55) 3px);
-}
+.ts-root .ts-holo-digit{display:block;flex-shrink:0;transform:skewX(-6deg);}
 .ts-root .ts-holo-digit polygon{fill:currentColor;}
-.ts-root .ts-holo-digit polygon.off{opacity:.09;}
+.ts-root .ts-holo-digit polygon.off{opacity:.11;}
 .ts-root .ts-holo-digit polygon.on{opacity:1;}
+.ts-root .ts-holo-colon{display:block;flex-shrink:0;transform:skewX(-6deg);transition:opacity .25s ease;margin:0 1px;}
 .ts-root .ts-holo-colon rect{fill:currentColor;}
-.ts-root .ts-holo-colon{transition:opacity .25s ease;margin:0 1px;}
-.ts-root .ts-holo-ap{font-size:9px;font-weight:800;letter-spacing:.08em;opacity:.85;line-height:1;margin-bottom:2px;}
+.ts-root .ts-holo-meridiem{font-size:11px;font-weight:800;letter-spacing:.08em;line-height:1;opacity:.9;margin:0 0 3px 4px;}
 
 @keyframes ts-holo-flicker{
-0%,92%,100%{opacity:1;}
-93%{opacity:.82;}
-94%{opacity:1;}
-96%{opacity:.9;}
+  0%,92%,100%{opacity:1;}
+  93%{opacity:.82;}
+  94%{opacity:1;}
+  96%{opacity:.9;}
 }
 @media (prefers-reduced-motion:reduce){.ts-root .ts-holo{animation:none;}}
 `;
