@@ -235,6 +235,58 @@ function groupOf(iso, nowMs) {
 }
 const GROUP_ORDER = ["Upcoming", "Earlier today", "Yesterday", "Older"];
 
+// ---------- calendar helpers ----------
+const SYMBOL_PRIORITY = ["USD", "EUR", "GBP", "JPY", "AUD", "NZD", "CAD", "CHF", "CNY", "XAU", "USOIL", "US500", "BTC"];
+
+function dayKey(iso) {
+  const d = new Date(iso);
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
+function dayLabel(iso, nowMs) {
+  const base = new Date(iso).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
+  const k = dayKey(iso);
+  const t = new Date(nowMs);
+  const tm = new Date(nowMs); tm.setDate(tm.getDate() + 1);
+  const yd = new Date(nowMs); yd.setDate(yd.getDate() - 1);
+  if (k === dayKey(t.toISOString())) return "Today · " + base;
+  if (k === dayKey(tm.toISOString())) return "Tomorrow · " + base;
+  if (k === dayKey(yd.toISOString())) return "Yesterday · " + base;
+  return base;
+}
+
+/** Fetches one endpoint, refreshes on an interval, only runs while `enabled`. */
+function useFeed(endpoint, enabled, intervalMs) {
+  const [state, setState] = useState({ items: null, loading: true, error: null, updatedAt: null });
+
+  const load = useCallback(async () => {
+    setState((s) => ({ ...s, loading: s.items === null, error: null }));
+    try {
+      const res = await fetch(endpoint);
+      let data = null;
+      try { data = await res.json(); } catch (e) { /* non-JSON response */ }
+      if (!res.ok) throw new Error((data && data.error) || "Request failed (" + res.status + ")");
+      setState({
+        items: Array.isArray(data.items) ? data.items : [],
+        loading: false,
+        error: null,
+        updatedAt: data.updatedAt || new Date().toISOString(),
+      });
+    } catch (e) {
+      setState((s) => ({ ...s, loading: false, error: e.message || "Network error" }));
+    }
+  }, [endpoint]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    load();
+    const id = setInterval(load, intervalMs);
+    return () => clearInterval(id);
+  }, [enabled, load, intervalMs]);
+
+  return { ...state, reload: load };
+}
+
 function readTheme() {
   if (typeof window === "undefined") return "dark";
   try {
@@ -265,14 +317,14 @@ function Chevron({ open }) {
   );
 }
 
-function NewsCard({ item, open, onToggle, now }) {
+function NewsCard({ item, open, onToggle, now, past }) {
   const meta = IMPACT[item.impact];
   const minsAway = Math.round((ts(item.time) - now) / 60000);
   const soon = minsAway > 0 && minsAway <= 30 && item.impact === "high";
   const hasData = item.actual || item.forecast || item.previous;
 
   return (
-    <article className={`nw-item nw-i-${item.impact}${open ? " open" : ""}${soon ? " soon" : ""}`}>
+    <article className={`nw-item nw-i-${item.impact}${open ? " open" : ""}${soon ? " soon" : ""}${past ? " past" : ""}`}>
       <button
         type="button"
         className="nw-item-head"
@@ -311,7 +363,7 @@ function NewsCard({ item, open, onToggle, now }) {
               <dl className="nw-data">
                 <div className={item.actual ? "has-actual" : ""}>
                   <dt>Actual</dt>
-                  <dd>{item.actual || "Pending"}</dd>
+                  <dd>{item.actual || (past ? "n/a" : "Pending")}</dd>
                 </div>
                 <div>
                   <dt>Forecast</dt>
@@ -378,46 +430,29 @@ export default function News({
 
   // ---- live data (used when the parent doesn't pass `items`) ----
   const useRemote = itemsProp === undefined;
-  const [remote, setRemote] = useState({
-    items: null,
-    loading: true,
-    error: null,
-    updatedAt: null,
-  });
+  const [view, setView] = useState("calendar"); // "calendar" | "news"
+  const [symbol, setSymbol] = useState("All");
+  const [upcomingOnly, setUpcomingOnly] = useState(true);
 
-  const load = useCallback(async () => {
-    setRemote((r) => ({ ...r, loading: r.items === null, error: null }));
-    try {
-      const res = await fetch("/api/economic-data");
-      let data = null;
-      try { data = await res.json(); } catch (e) { /* non-JSON response */ }
-      if (!res.ok) {
-        throw new Error((data && data.error) || "Request failed (" + res.status + ")");
-      }
-      setRemote({
-        items: Array.isArray(data.items) ? data.items : [],
-        loading: false,
-        error: null,
-        updatedAt: data.updatedAt || new Date().toISOString(),
-      });
-    } catch (e) {
-      // keep old items on screen if we already had some
-      setRemote((r) => ({ ...r, loading: false, error: e.message || "Network error" }));
-    }
-  }, []);
+  // Each feed only loads while its tab is open (saves your Marketaux quota)
+  const cal = useFeed("/api/economic-calendar", useRemote && view === "calendar", 15 * 60 * 1000);
+  const news = useFeed("/api/economic-data", useRemote && view === "news", 30 * 60 * 1000);
+  const feed = view === "calendar" ? cal : news;
+  const isCalendar = useRemote && view === "calendar";
 
-  useEffect(() => {
-    if (!useRemote) return;
-    load();
-    const id = setInterval(load, 30 * 60 * 1000); // refresh every 30 min to stay under the API daily limit
-    return () => clearInterval(id);
-  }, [useRemote, load]);
+  const items = useRemote ? feed.items || [] : itemsProp;
+  const loading = useRemote ? feed.loading && feed.items === null : loadingProp;
+  const error = useRemote ? (feed.items && feed.items.length ? null : feed.error) : errorProp;
+  const updatedAt = useRemote ? feed.updatedAt : updatedAtProp;
+  const onRefresh = useRemote ? feed.reload : onRefreshProp;
 
-  const items = useRemote ? remote.items || [] : itemsProp;
-  const loading = useRemote ? remote.loading && remote.items === null : loadingProp;
-  const error = useRemote ? (remote.items && remote.items.length ? null : remote.error) : errorProp;
-  const updatedAt = useRemote ? remote.updatedAt : updatedAtProp;
-  const onRefresh = useRemote ? load : onRefreshProp;
+  const switchView = (v) => {
+    setView(v);
+    setSymbol("All");
+    setCategory("All");
+    setImpactFilter("all");
+    setOpenId(null);
+  };
 
   useEffect(() => {
     const sync = () => setStoredTheme(readTheme());
@@ -441,11 +476,32 @@ export default function News({
     return source.map(normalizeItem).filter((i) => i.time && !isNaN(ts(i.time)));
   }, [items]);
 
-  const categories = useMemo(() => ["All", ...Array.from(new Set(list.map((i) => i.category)))], [list]);
+  // currency / market chips, majors first, then by frequency
+  const symbolChips = useMemo(() => {
+    const freq = {};
+    list.forEach((i) => i.symbols.forEach((s) => { if (s !== "ALL") freq[s] = (freq[s] || 0) + 1; }));
+    const rank = (s) => { const p = SYMBOL_PRIORITY.indexOf(s); return p === -1 ? 999 : p; };
+    const sorted = Object.keys(freq).sort((a, b) => rank(a) - rank(b) || freq[b] - freq[a] || a.localeCompare(b));
+    return ["All", ...sorted.slice(0, 14)];
+  }, [list]);
+
+  // currency filter + "hide past events" (events from the last 15 min stay visible)
+  const inScope = useMemo(
+    () =>
+      list.filter((i) => {
+        if (symbol !== "All" && !(i.symbols.includes(symbol) || i.symbols.includes("ALL"))) return false;
+        if (isCalendar && upcomingOnly && ts(i.time) < now - 15 * 60000) return false;
+        return true;
+      }),
+    [list, symbol, isCalendar, upcomingOnly, now]
+  );
+
+  const categories = useMemo(() => ["All", ...Array.from(new Set(inScope.map((i) => i.category)))], [inScope]);
+  const activeCategory = categories.includes(category) ? category : "All";
 
   const inCategory = useMemo(
-    () => (category === "All" ? list : list.filter((i) => i.category === category)),
-    [list, category]
+    () => (activeCategory === "All" ? inScope : inScope.filter((i) => i.category === activeCategory)),
+    [inScope, activeCategory]
   );
 
   const counts = useMemo(() => {
@@ -456,24 +512,39 @@ export default function News({
 
   const totals = useMemo(() => {
     const c = { high: 0, medium: 0, low: 0 };
-    list.forEach((i) => { c[i.impact] += 1; });
+    inScope.forEach((i) => { c[i.impact] += 1; });
     return c;
-  }, [list]);
+  }, [inScope]);
 
   const visible = useMemo(
     () => inCategory.filter((i) => impactFilter === "all" || i.impact === impactFilter),
     [inCategory, impactFilter]
   );
 
+  // next red event for the selected currency
   const nextHigh = useMemo(() => {
     return (
-      list
+      inScope
         .filter((i) => i.impact === "high" && ts(i.time) > now)
         .sort((a, b) => ts(a.time) - ts(b.time))[0] || null
     );
-  }, [list, now]);
+  }, [inScope, now]);
 
   const groups = useMemo(() => {
+    if (isCalendar) {
+      // Forex Factory style: one section per day, earliest first
+      const byDay = {};
+      visible.forEach((i) => {
+        const k = dayKey(i.time);
+        (byDay[k] = byDay[k] || []).push(i);
+      });
+      return Object.keys(byDay)
+        .sort()
+        .map((k) => ({
+          name: dayLabel(byDay[k][0].time, now),
+          rows: byDay[k].slice().sort((a, b) => ts(a.time) - ts(b.time)),
+        }));
+    }
     const map = {};
     visible.forEach((i) => {
       const g = groupOf(i.time, now);
@@ -484,7 +555,7 @@ export default function News({
       name: g,
       rows: map[g].slice().sort((a, b) => (g === "Upcoming" ? ts(a.time) - ts(b.time) : ts(b.time) - ts(a.time))),
     }));
-  }, [visible, now]);
+  }, [visible, now, isCalendar]);
 
   const nextHighSoon = nextHigh && ts(nextHigh.time) - now <= 30 * 60000;
   const stamp = clockTime(updatedAt || new Date(mountedAt).toISOString());
@@ -498,6 +569,8 @@ export default function News({
   const clearFilters = () => {
     setImpactFilter("all");
     setCategory("All");
+    setSymbol("All");
+    setUpcomingOnly(false);
   };
 
   return (
@@ -521,6 +594,17 @@ export default function News({
             Refresh
           </button>
         </header>
+
+        {useRemote && (
+          <div className="nw-seg" style={{ gridTemplateColumns: "1fr 1fr", marginBottom: 14 }} role="group" aria-label="Feed">
+            <button type="button" className="nw-pill" aria-pressed={view === "calendar"} onClick={() => switchView("calendar")}>
+              Calendar
+            </button>
+            <button type="button" className="nw-pill" aria-pressed={view === "news"} onClick={() => switchView("news")}>
+              Headlines
+            </button>
+          </div>
+        )}
 
         {/* what matters next + how heavy the day is */}
         <section className={"nw-pulse" + (nextHighSoon ? " live" : "")} aria-label="Next high-impact event">
@@ -577,13 +661,31 @@ export default function News({
             ))}
           </div>
 
+          {symbolChips.length > 1 && (
+            <div className="nw-chips" role="group" aria-label="Filter by currency or market">
+              {symbolChips.map((s) => (
+                <button key={s} type="button" className="nw-chip" aria-pressed={symbol === s} onClick={() => setSymbol(s)}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+
           {categories.length > 2 && (
             <div className="nw-chips" role="group" aria-label="Filter by category">
               {categories.map((c) => (
-                <button key={c} type="button" className="nw-chip" aria-pressed={category === c} onClick={() => setCategory(c)}>
+                <button key={c} type="button" className="nw-chip" aria-pressed={activeCategory === c} onClick={() => setCategory(c)}>
                   {c}
                 </button>
               ))}
+            </div>
+          )}
+
+          {isCalendar && (
+            <div className="nw-chips">
+              <button type="button" className="nw-chip" aria-pressed={upcomingOnly} onClick={() => setUpcomingOnly((v) => !v)}>
+                Hide past events
+              </button>
             </div>
           )}
         </div>
@@ -622,7 +724,14 @@ export default function News({
               </h3>
               <div className="nw-list">
                 {g.rows.map((item) => (
-                  <NewsCard key={item.id} item={item} now={now} open={openId === item.id} onToggle={() => toggle(item)} />
+                  <NewsCard
+                    key={item.id}
+                    item={item}
+                    now={now}
+                    past={isCalendar && ts(item.time) < now}
+                    open={openId === item.id}
+                    onToggle={() => toggle(item)}
+                  />
                 ))}
               </div>
             </section>
@@ -691,6 +800,8 @@ font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 
 .nw-root .nw-back{display:inline-flex;align-items:center;gap:4px;margin-bottom:14px;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);border-radius:var(--r-pill);padding:7px 13px;font-size:12px;font-weight:600;cursor:pointer;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);transition:all .18s ease;}
 .nw-root .nw-back:hover{border-color:var(--amber);color:var(--text);}
+
+.nw-root .nw-item.past .nw-item-head{opacity:.55;}
 
 /* header */
 .nw-root .nw-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:16px;}
