@@ -622,6 +622,44 @@ function HoloDigit({ ch }) {
   );
 }
 
+const SESSIONS = [
+  { name: "SYDNEY", tz: "Australia/Sydney", open: 8, close: 17 },
+  { name: "ASIAN", tz: "Asia/Tokyo", open: 9, close: 18 },
+  { name: "LONDON", tz: "Europe/London", open: 8, close: 17 },
+  { name: "NEW YORK", tz: "America/New_York", open: 8, close: 17 },
+];
+
+const sessionFmtCache = {};
+function sessionFmt(tz) {
+  if (!sessionFmtCache[tz]) {
+    sessionFmtCache[tz] = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      weekday: "short",
+      hour: "numeric",
+      hourCycle: "h23",
+    });
+  }
+  return sessionFmtCache[tz];
+}
+
+function activeSessionLabel(date) {
+  try {
+    const open = SESSIONS.filter((s) => {
+      let wd = "";
+      let h = -1;
+      sessionFmt(s.tz).formatToParts(date).forEach((p) => {
+        if (p.type === "weekday") wd = p.value;
+        if (p.type === "hour") h = Number(p.value);
+      });
+      if (wd === "Sat" || wd === "Sun") return false;
+      return h >= s.open && h < s.close;
+    }).map((s) => s.name);
+    return open.length ? open.join(" + ") : "MARKETS CLOSED";
+  } catch (e) {
+    return "";
+  }
+}
+
 function HoloClock() {
   const [t, setT] = useState(() => new Date());
 
@@ -636,10 +674,11 @@ function HoloClock() {
   const hh = pad(hr);
   const mm = pad(t.getMinutes());
   const blink = t.getSeconds() % 2 === 0;
+  const sessionLabel = activeSessionLabel(t);
 
   return ce(
     "div",
-    { className: "ts-holo", role: "timer", "aria-label": hh + ":" + mm + " " + ap },
+    { className: "ts-holo", role: "timer", "aria-label": hh + ":" + mm + " " + ap + " " + sessionLabel },
     ce(HoloDigit, { ch: hh[0] === "0" ? null : Number(hh[0]) }),
     ce(HoloDigit, { ch: Number(hh[1]) }),
     ce(
@@ -657,7 +696,12 @@ function HoloClock() {
     ),
     ce(HoloDigit, { ch: Number(mm[0]) }),
     ce(HoloDigit, { ch: Number(mm[1]) }),
-    ce("span", { className: "ts-holo-meridiem" }, ap)
+    ce(
+      "div",
+      { className: "ts-holo-side" },
+      ce("span", { className: "ts-holo-session" }, sessionLabel),
+      ce("span", { className: "ts-holo-meridiem" }, ap)
+    )
   );
 }
 
@@ -2362,6 +2406,9 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .ts-root .ts-holo-colon{display:block;flex-shrink:0;transform:skewX(-6deg);transition:opacity .25s ease;margin:0 1px;}
 .ts-root .ts-holo-colon rect{fill:currentColor;}
 .ts-root .ts-holo-meridiem{font-size:11px;font-weight:800;letter-spacing:.08em;line-height:1;opacity:.9;margin:0 0 3px 4px;}
+.ts-root .ts-holo-side{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin:0 0 3px 4px;}
+.ts-root .ts-holo-side .ts-holo-meridiem{margin:0;}
+.ts-root .ts-holo-session{font-size:11px;font-weight:800;letter-spacing:.08em;line-height:1;opacity:.9;white-space:nowrap;}
 
 @keyframes ts-holo-flicker{
   0%,92%,100%{opacity:1;}
