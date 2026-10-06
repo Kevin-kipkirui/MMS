@@ -594,6 +594,62 @@ function EditLimitModal({ mode, maxLoss, currency, tradeLimit, dailyTarget, onCl
   );
 }
 
+// ---------- floating hologram clock ----------
+const SEG_POLY = {
+  a: "2,1 18,1 15.5,4.5 4.5,4.5",
+  b: "19,2 19,18 15.5,14.5 15.5,5.5",
+  c: "19,18 19,34 15.5,30.5 15.5,21.5",
+  d: "2,35 18,35 15.5,31.5 4.5,31.5",
+  e: "1,18 4.5,21.5 4.5,30.5 1,34",
+  f: "1,2 4.5,5.5 4.5,14.5 1,18",
+  g: "2.5,18 5,14.8 15,14.8 17.5,18 15,21.2 5,21.2",
+};
+const SEG_MAP = {
+  0: "abcdef", 1: "bc", 2: "abged", 3: "abgcd", 4: "fgbc",
+  5: "afgcd", 6: "afgedc", 7: "abc", 8: "abcdefg", 9: "abcdfg",
+};
+
+function HoloDigit({ ch }) {
+  const lit = ch == null ? "" : SEG_MAP[ch] || "";
+  return (
+    <svg className="ts-holo-digit" viewBox="0 0 20 36" aria-hidden="true">
+      {Object.keys(SEG_POLY).map((k) => (
+        <polygon key={k} points={SEG_POLY[k]} className={lit.includes(k) ? "on" : "off"} />
+      ))}
+    </svg>
+  );
+}
+
+function HoloClock() {
+  const [t, setT] = useState(() => new Date());
+
+  useEffect(() => {
+    const id = setInterval(() => setT(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  let h = t.getHours();
+  const ap = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  const hh = pad(h);
+  const mm = pad(t.getMinutes());
+  const blink = t.getSeconds() % 2 === 0;
+
+  return (
+    <div className="ts-holo" role="timer" aria-label={`${hh}:${mm} ${ap}`}>
+      <HoloDigit ch={hh[0] === "0" ? null : Number(hh[0])} />
+      <HoloDigit ch={Number(hh[1])} />
+      <svg className="ts-holo-colon" width="6" height="27" viewBox="0 0 6 36" aria-hidden="true" style={{ opacity: blink ? 1 : 0.18 }}>
+        <rect x="1" y="8" width="4" height="4" rx="1" fill="currentColor" />
+        <rect x="1" y="24" width="4" height="4" rx="1" fill="currentColor" />
+      </svg>
+      <HoloDigit ch={Number(mm[0])} />
+      <HoloDigit ch={Number(mm[1])} />
+      <span className="ts-holo-meridiem">{ap}</span>
+    </div>
+  );
+}
+
 // ---------- component ----------
 export default function Session({ onOpenSummit, onOpenPerformance } = {}) {
   const [authUser, setAuthUser] = useState(null);
@@ -1776,6 +1832,8 @@ export default function Session({ onOpenSummit, onOpenPerformance } = {}) {
         <span>Back to now</span>
       </button>
 
+      <HoloClock />
+
       <nav className="ts-dock" aria-label="Sections">
         {DOCK.map((t) => (
           <button
@@ -2107,7 +2165,7 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .ts-root .resetlink:hover{color:var(--text);}
 
 /* ---------- floating "back to now" pill ---------- */
-.ts-root .nowbtn{position:fixed;left:50%;transform:translate(-50%,16px);bottom:calc(92px + env(safe-area-inset-bottom,0px));z-index:40;display:flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--surface);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);color:var(--text);border-radius:var(--r-pill);padding:10px 18px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 14px 30px -10px rgba(5,15,40,.55);opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;}
+.ts-root .nowbtn{position:fixed;left:50%;transform:translate(-50%,16px);bottom:calc(128px + env(safe-area-inset-bottom,0px));z-index:40;display:flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--surface);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);color:var(--text);border-radius:var(--r-pill);padding:10px 18px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 14px 30px -10px rgba(5,15,40,.55);opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;}
 .ts-root .nowbtn.show{opacity:1;pointer-events:auto;transform:translate(-50%,0);}
 .ts-root .nowbtn:hover{border-color:var(--amber);}
 .ts-root .nowbtn .pulse{width:8px;height:8px;border-radius:50%;background:var(--amber);flex-shrink:0;box-shadow:0 0 0 4px var(--amber-dim);}
@@ -2270,4 +2328,40 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
   100%{opacity:0;transform:translate3d(var(--dx),108vh,0) rotate(720deg);}
 }
 @media (prefers-reduced-motion:reduce){.ts-confetti{display:none;}.ts-goal,.ts-goal-emoji{animation:none;}}
+
+/* ---------- floating hologram clock ---------- */
+.ts-root{--holo-glow:rgba(232,201,122,.60);}
+.ts-root[data-theme="light"]{--holo-glow:rgba(47,111,196,.50);}
+
+.ts-root .ts-holo{
+position:fixed;
+left:max(18px,calc(50% - 236px));
+bottom:calc(90px + env(safe-area-inset-bottom,0px));
+z-index:44;
+display:flex;align-items:flex-end;gap:5px;
+color:var(--accent-text);
+pointer-events:none;
+filter:drop-shadow(0 0 3px var(--holo-glow)) drop-shadow(0 0 10px var(--holo-glow));
+animation:ts-holo-flicker 7s infinite;
+}
+.ts-root .ts-holo-digits{
+display:flex;align-items:flex-end;gap:2px;
+/* faint scanlines for the hologram feel */
+-webkit-mask-image:repeating-linear-gradient(0deg,#000 0,#000 2px,rgba(0,0,0,.55) 2px,rgba(0,0,0,.55) 3px);
+mask-image:repeating-linear-gradient(0deg,#000 0,#000 2px,rgba(0,0,0,.55) 2px,rgba(0,0,0,.55) 3px);
+}
+.ts-root .ts-holo-digit polygon{fill:currentColor;}
+.ts-root .ts-holo-digit polygon.off{opacity:.09;}
+.ts-root .ts-holo-digit polygon.on{opacity:1;}
+.ts-root .ts-holo-colon rect{fill:currentColor;}
+.ts-root .ts-holo-colon{transition:opacity .25s ease;margin:0 1px;}
+.ts-root .ts-holo-ap{font-size:9px;font-weight:800;letter-spacing:.08em;opacity:.85;line-height:1;margin-bottom:2px;}
+
+@keyframes ts-holo-flicker{
+0%,92%,100%{opacity:1;}
+93%{opacity:.82;}
+94%{opacity:1;}
+96%{opacity:.9;}
+}
+@media (prefers-reduced-motion:reduce){.ts-root .ts-holo{animation:none;}}
 `;
