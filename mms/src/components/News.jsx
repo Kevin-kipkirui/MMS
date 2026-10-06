@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 
 /**
  * <News />
@@ -52,6 +52,7 @@ function normalizeItem(raw, idx) {
     time,
     impact: normalizeImpact(raw.impact),
     symbols: raw.symbols || raw.currencies || [],
+    country: raw.country || raw.countryCode || null,
     actual: raw.actual != null ? String(raw.actual) : null,
     forecast: raw.forecast != null ? String(raw.forecast) : null,
     previous: raw.previous != null ? String(raw.previous) : null,
@@ -238,6 +239,38 @@ const GROUP_ORDER = ["Upcoming", "Earlier today", "Yesterday", "Older"];
 // ---------- calendar helpers ----------
 const SYMBOL_PRIORITY = ["USD", "EUR", "GBP", "JPY", "AUD", "NZD", "CAD", "CHF", "CNY", "XAU", "USOIL", "US500", "BTC"];
 
+// ---------- flags + header helpers ----------
+const FLAG_CODE = {
+USD: "us", EUR: "eu", GBP: "gb", JPY: "jp", AUD: "au", NZD: "nz", CAD: "ca",
+CHF: "ch", CNY: "cn", INR: "in", ZAR: "za", MXN: "mx", SEK: "se", NOK: "no",
+SGD: "sg", HKD: "hk", KES: "ke", TRY: "tr", BRL: "br", KRW: "kr",
+};
+const flagUrl = (code) => "https://flagcdn.com/w80/" + code + ".png";
+
+/** item.country (e.g. "de") wins, otherwise the first currency we know a flag for. */
+function flagCodeFor(item) {
+if (item.country) return String(item.country).toLowerCase();
+for (const s of item.symbols) if (FLAG_CODE[s]) return FLAG_CODE[s];
+return null;
+}
+
+function weekRange(nowMs) {
+const d = new Date(nowMs);
+const mon = new Date(d);
+mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+const fri = new Date(mon);
+fri.setDate(mon.getDate() + 4);
+return (
+mon.toLocaleDateString("en-GB", { day: "numeric" }) + " – " +
+fri.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+);
+}
+
+function tzLabel() {
+const off = -new Date().getTimezoneOffset() / 60;
+return "UTC" + (off >= 0 ? "+" : "") + off;
+}
+
 function dayKey(iso) {
   const d = new Date(iso);
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
@@ -317,11 +350,92 @@ function Chevron({ open }) {
   );
 }
 
+function Flag({ code, label, size = 30 }) {
+  const [bad, setBad] = useState(false);
+  if (!code || bad) {
+    return (
+      <span className="nw-flag nw-flag-fb" style={{ width: size, height: size }}>
+        {(label || "•").slice(0, 3)}
+      </span>
+    );
+  }
+  return (
+    <img
+      className="nw-flag"
+      src={flagUrl(code)}
+      alt=""
+      width={size}
+      height={size}
+      loading="lazy"
+      onError={() => setBad(true)}
+    />
+  );
+}
+
+/** options: [{ value, label, flag?, symbol?, dot?, count? }] */
+function Dropdown({ label, value, options, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("touchstart", away);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", away);
+      document.removeEventListener("touchstart", away);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+
+  const current = options.find((o) => o.value === value) || options[0];
+  const body = (o) => (
+    <>
+      {o.dot && <i className={"nw-dot nw-i-" + o.dot} />}
+      {o.flag && <Flag code={o.flag} label={o.label} size={18} />}
+      {o.symbol && <span className="nw-dd-symbol">{o.symbol}</span>}
+      {o.label}
+      {o.count != null && <span className="nw-dd-count">{o.count}</span>}
+    </>
+  );
+
+  return (
+    <div className={"nw-dd" + (open ? " open" : "")} ref={ref}>
+      {label && <span className="nw-dd-label">{label}</span>}
+      <button type="button" className="nw-dd-btn" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        {body({ ...current, count: null })}
+      </button>
+
+      {open && (
+        <div className="nw-dd-menu" role="listbox" aria-label={label || "Options"}>
+          {options.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              role="option"
+              aria-selected={o.value === value}
+              className="nw-dd-opt"
+              onClick={() => { onChange(o.value); setOpen(false); }}
+            >
+              {body(o)}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function NewsCard({ item, open, onToggle, now, past }) {
   const meta = IMPACT[item.impact];
+  const level = item.impact === "high" ? 3 : item.impact === "medium" ? 2 : 1;
   const minsAway = Math.round((ts(item.time) - now) / 60000);
   const soon = minsAway > 0 && minsAway <= 30 && item.impact === "high";
   const hasData = item.actual || item.forecast || item.previous;
+  const code = flagCodeFor(item);
 
   return (
     <article className={`nw-item nw-i-${item.impact}${open ? " open" : ""}${soon ? " soon" : ""}${past ? " past" : ""}`}>
@@ -337,18 +451,31 @@ function NewsCard({ item, open, onToggle, now, past }) {
           <span>{relTime(item.time, now)}</span>
         </span>
 
+        <Flag code={code} label={item.symbols[0]} />
+
         <span className="nw-main">
           <span className="nw-title">{item.title}</span>
           <span className="nw-meta">
-            {item.source && <span>{item.source}</span>}
+            {item.symbols[0] && <span className="nw-ccy">{item.symbols[0]}</span>}
             <span className="nw-cat">{item.category}</span>
+            {item.source && <span>{item.source}</span>}
           </span>
         </span>
 
+        <span className="nw-nums">
+          <span className={item.actual ? "has-actual" : ""}>{item.actual || "–"}</span>
+          <span>{item.forecast || "–"}</span>
+          <span>{item.previous || "–"}</span>
+        </span>
+
         <span className="nw-side">
-          <span className="nw-badge">
-            <i />
-            {meta.label}
+          <span className="nw-imp" title={meta.label + " impact"}>
+            <span className="nw-bars" aria-hidden="true">
+              {[1, 2, 3].map((n) => (
+                <b key={n} className={n <= level ? "on" : ""} />
+              ))}
+            </span>
+            <span className="nw-imp-label">{meta.label}</span>
           </span>
           <Chevron open={open} />
         </span>
@@ -560,6 +687,18 @@ export default function News({
   const nextHighSoon = nextHigh && ts(nextHigh.time) - now <= 30 * 60000;
   const stamp = clockTime(updatedAt || new Date(mountedAt).toISOString());
   const totalCount = totals.high + totals.medium + totals.low;
+  const impactOptions = [
+    { value: "all", label: "All impact", count: inCategory.length },
+    ...IMPACT_ORDER.map((k) => ({ value: k, label: IMPACT[k].label, dot: k, count: counts[k] })),
+  ];
+  const currencyOptions = symbolChips.map((s) => ({
+    value: s,
+    label: s === "All" ? "All currencies" : s,
+    flag: s === "All" ? null : FLAG_CODE[s] || null,
+    symbol: s,
+  }));
+  const categoryOptions = categories.map((c) => ({ value: c, label: c === "All" ? "All categories" : c }));
+  const pageTitle = useRemote && view === "news" ? "Market Headlines" : "Weekly Economic Calendar";
 
   const toggle = (item) => {
     setOpenId((cur) => (cur === item.id ? null : item.id));
@@ -584,8 +723,11 @@ export default function News({
         )}
         <header className="nw-head">
           <div>
-            <h2>Market news</h2>
-            <div className="nw-updated">Updated {stamp}</div>
+            <h2>{pageTitle}</h2>
+            <div className="nw-updated">
+              {weekRange(now)} ({tzLabel()})
+              <span> · Updated {stamp}</span>
+            </div>
           </div>
           <button type="button" className="nw-refresh" onClick={() => typeof onRefresh === "function" && onRefresh()}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -606,21 +748,27 @@ export default function News({
           </div>
         )}
 
-        {/* what matters next + how heavy the day is */}
-        <section className={"nw-pulse" + (nextHighSoon ? " live" : "")} aria-label="Next high-impact event">
-          <div className="nw-pulse-row">
-            <span className="nw-ping" aria-hidden="true" />
-            <div>
-              <div className="nw-pulse-title">
-                {nextHigh ? `${nextHigh.title} ${relTime(nextHigh.time, now)}` : "No high-impact events ahead"}
-              </div>
-              <div className="nw-pulse-sub">
-                {nextHigh
-                  ? "Plan to be flat 30 minutes either side of it."
-                  : "The rest of the schedule is clear of red events."}
+        <section className={"nw-pulse nw-hero" + (nextHighSoon ? " live" : "")} aria-label="Next high-impact event">
+          <div className="nw-pulse-top">
+            <span className="nw-hero-label">Next high-impact event</span>
+            {nextHigh && <span className="nw-hero-meta">{relTime(nextHigh.time, now)}</span>}
+          </div>
+
+          {nextHigh ? (
+            <div className="nw-hero-ev">
+              <Flag code={flagCodeFor(nextHigh)} label={nextHigh.symbols[0]} size={46} />
+              <div>
+                <div className="nw-pulse-title">{nextHigh.title}</div>
+                <div className="nw-pulse-sub">
+                  {dayLabel(nextHigh.time, now)} · {clockTime(nextHigh.time)} · Plan to be flat 30 minutes either side.
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="nw-pulse-sub" style={{ marginTop: 10 }}>
+              No high-impact events ahead. The rest of the schedule is clear of red events.
+            </div>
+          )}
 
           {totalCount > 0 && (
             <>
@@ -641,52 +789,26 @@ export default function News({
           )}
         </section>
 
-        {/* filters */}
         <div className="nw-filters">
-          <div className="nw-seg" role="group" aria-label="Filter by impact">
-            <button type="button" className="nw-pill" aria-pressed={impactFilter === "all"} onClick={() => setImpactFilter("all")}>
-              All <em>{inCategory.length}</em>
-            </button>
-            {IMPACT_ORDER.map((k) => (
-              <button
-                key={k}
-                type="button"
-                className={`nw-pill nw-i-${k}`}
-                aria-pressed={impactFilter === k}
-                onClick={() => setImpactFilter((cur) => (cur === k ? "all" : k))}
-              >
-                <i />
-                {IMPACT[k].label} <em>{counts[k]}</em>
-              </button>
-            ))}
+          <div className="nw-dd-row">
+            <Dropdown label="Impact" value={impactFilter} options={impactOptions} onChange={setImpactFilter} />
+            <Dropdown label="Currency" value={symbol} options={currencyOptions} onChange={setSymbol} />
+            {categoryOptions.length > 1 && (
+              <Dropdown label="Category" value={activeCategory} options={categoryOptions} onChange={setCategory} />
+            )}
           </div>
 
-          {symbolChips.length > 1 && (
-            <div className="nw-chips" role="group" aria-label="Filter by currency or market">
-              {symbolChips.map((s) => (
-                <button key={s} type="button" className="nw-chip" aria-pressed={symbol === s} onClick={() => setSymbol(s)}>
-                  {s}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {categories.length > 2 && (
-            <div className="nw-chips" role="group" aria-label="Filter by category">
-              {categories.map((c) => (
-                <button key={c} type="button" className="nw-chip" aria-pressed={activeCategory === c} onClick={() => setCategory(c)}>
-                  {c}
-                </button>
-              ))}
-            </div>
-          )}
-
           {isCalendar && (
-            <div className="nw-chips">
-              <button type="button" className="nw-chip" aria-pressed={upcomingOnly} onClick={() => setUpcomingOnly((v) => !v)}>
-                Hide past events
-              </button>
-            </div>
+            <button
+              type="button"
+              className="nw-toggle"
+              role="switch"
+              aria-checked={upcomingOnly}
+              onClick={() => setUpcomingOnly((v) => !v)}
+            >
+              <span>Hide past events</span>
+              <span className="nw-switch" />
+            </button>
           )}
         </div>
 
@@ -718,11 +840,23 @@ export default function News({
         ) : (
           groups.map((g) => (
             <section key={g.name} className="nw-group">
-              <h3>
-                {g.name}
-                <span>{g.rows.length}</span>
-              </h3>
-              <div className="nw-list">
+              <div className="nw-table-head">
+                <h3>{g.name}</h3>
+                <span>
+                  {g.rows.length} {g.rows.length === 1 ? "event" : "events"}
+                </span>
+              </div>
+
+              <div className="nw-table">
+                <div className="nw-table-header" aria-hidden="true">
+                  <span>Time</span>
+                  <span>Event</span>
+                  <span>Actual</span>
+                  <span>Forecast</span>
+                  <span>Previous</span>
+                  <span>Impact</span>
+                </div>
+
                 {g.rows.map((item) => (
                   <NewsCard
                     key={item.id}
@@ -906,4 +1040,94 @@ font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
   .nw-root .nw-pulse.live,.nw-root .nw-skel{animation:none;}
   .nw-root .nw-detail,.nw-root .nw-chev{transition:none;}
 }
+
+/* ===== v2: official table layout, dropdowns, flags ===== */
+.nw-root{--menu-bg:#10172c;--cols:58px 32px minmax(0,1fr) auto;}
+.nw-root[data-theme="light"]{--menu-bg:#f5f9ff;}
+.nw-root .nw-wrap{max-width:680px;}
+
+/* header */
+.nw-root .nw-ttl{margin:0;font-weight:800;font-size:clamp(24px,6vw,32px);letter-spacing:-.03em;line-height:1.1;
+background:linear-gradient(90deg,var(--accent-text),var(--amber));-webkit-background-clip:text;background-clip:text;color:transparent;}
+.nw-root .nw-range{margin-top:6px;font-size:13.5px;font-weight:600;color:var(--text);opacity:.85;}
+
+/* hero card */
+.nw-root .nw-hero{padding:20px;}
+.nw-root .nw-hero-top{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.nw-root .nw-eyebrow{display:inline-flex;align-items:center;gap:10px;font-size:10.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+.nw-root .nw-eyebrow .nw-ping{margin-top:0;width:8px;height:8px;}
+.nw-root .nw-count{padding:5px 12px;border-radius:var(--r-pill);background:var(--rose-dim);color:var(--rose);font-size:12px;font-weight:800;font-variant-numeric:tabular-nums;}
+.nw-root .nw-hero-ev{display:flex;align-items:center;gap:14px;margin-top:16px;}
+.nw-root .nw-hero .nw-pulse-title{font-size:19px;}
+
+/* flags */
+.nw-root .nw-flag{border-radius:50%;object-fit:cover;flex-shrink:0;background:var(--surface-2);box-shadow:0 0 0 1.5px var(--border),0 4px 10px -4px rgba(0,0,0,.5);}
+.nw-root .nw-flag-fb{display:inline-grid;place-items:center;font-size:9px;font-weight:800;letter-spacing:.02em;color:var(--accent-text);}
+.nw-root .nw-item-head .nw-flag{margin-top:1px;}
+
+/* dropdowns */
+.nw-root .nw-filters{position:relative;z-index:30;margin:18px 0 4px;}
+.nw-root .nw-fgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;}
+.nw-root .nw-dd{position:relative;min-width:0;}
+.nw-root .nw-dd-label{display:block;margin:0 0 6px 4px;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);}
+.nw-root .nw-dd-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 12px;border-radius:var(--r-input);border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:12.5px;font-weight:700;cursor:pointer;transition:border-color .18s ease;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);}
+.nw-root .nw-dd-btn:hover,.nw-root .nw-dd.open .nw-dd-btn{border-color:var(--amber);}
+.nw-root .nw-dd-cur{display:inline-flex;align-items:center;gap:8px;min-width:0;}
+.nw-root .nw-dd-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.nw-root .nw-dd-btn .nw-chev{flex-shrink:0;}
+.nw-root .nw-dd-menu{position:absolute;top:calc(100% + 6px);left:0;min-width:100%;width:max-content;max-width:260px;max-height:300px;overflow-y:auto;padding:6px;border-radius:16px;background:var(--menu-bg);border:1px solid var(--border);box-shadow:0 24px 48px -16px rgba(0,0,0,.7);z-index:60;animation:nw-pop .16s ease;}
+.nw-root .nw-fgrid .nw-dd:nth-child(3) .nw-dd-menu{left:auto;right:0;}
+.nw-root .nw-dd-opt{width:100%;display:flex;align-items:center;gap:10px;padding:9px 10px;border:none;border-radius:10px;background:none;color:var(--text);font-size:12.5px;font-weight:600;text-align:left;cursor:pointer;}
+.nw-root .nw-dd-opt:hover{background:var(--surface-2);}
+.nw-root .nw-dd-opt[aria-selected="true"]{background:var(--amber-dim);}
+.nw-root .nw-dd-opt .nw-dd-text{flex:1;}
+.nw-root .nw-dd-opt em{font-style:normal;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;}
+.nw-root .nw-dot{display:block;width:8px;height:8px;border-radius:50%;background:var(--ic);flex-shrink:0;}
+
+/* hide-past switch */
+.nw-root .nw-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding:11px 14px;border-radius:var(--r-input);border:1px solid var(--border);background:var(--surface-2);color:var(--muted);font-size:12.5px;font-weight:600;cursor:pointer;}
+.nw-root .nw-switch{position:relative;width:38px;height:22px;border-radius:var(--r-pill);background:var(--border);transition:background .2s ease;}
+.nw-root .nw-switch::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--text);transition:transform .2s ease;}
+.nw-root .nw-toggle[aria-checked="true"]{color:var(--text);}
+.nw-root .nw-toggle[aria-checked="true"] .nw-switch{background:var(--btn);}
+.nw-root .nw-toggle[aria-checked="true"] .nw-switch::after{transform:translateX(16px);background:var(--on-accent);}
+
+/* day bar + column header */
+.nw-root .nw-group h3.nw-day{display:flex;align-items:center;justify-content:space-between;margin:28px 0 10px;padding:10px 14px;border-radius:14px;background:var(--amber-dim);border:1px solid var(--border);font-size:14px;font-weight:800;letter-spacing:-.01em;}
+.nw-root .nw-day-count{font-size:11.5px;font-weight:600;color:var(--muted);}
+.nw-root .nw-cols{display:grid;grid-template-columns:var(--cols);gap:12px;padding:0 14px 8px 19px;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);}
+.nw-root .nw-cols-nums,.nw-root .nw-cols-imp{display:none;}
+
+/* rows */
+.nw-root .nw-list{gap:8px;}
+.nw-root .nw-item-head{grid-template-columns:var(--cols);align-items:start;}
+.nw-root .nw-ccy{font-weight:800;color:var(--text);letter-spacing:.03em;}
+.nw-root .nw-nums{display:none;}
+.nw-root .nw-side{flex-direction:row;align-items:center;gap:8px;}
+.nw-root .nw-imp{display:inline-flex;align-items:center;gap:8px;}
+.nw-root .nw-bars{display:inline-flex;align-items:flex-end;gap:2px;height:14px;}
+.nw-root .nw-bars b{display:block;width:4px;border-radius:2px;background:var(--border);}
+.nw-root .nw-bars b:nth-child(1){height:6px;}
+.nw-root .nw-bars b:nth-child(2){height:10px;}
+.nw-root .nw-bars b:nth-child(3){height:14px;}
+.nw-root .nw-bars b.on{background:var(--ic);}
+.nw-root .nw-imp-label{display:none;font-size:11.5px;font-weight:700;color:var(--ic);}
+
+@media (min-width:600px){
+.nw-root{--cols:62px 32px minmax(0,1fr) 168px 96px;}
+.nw-root .nw-nums,.nw-root .nw-cols-nums{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.nw-root .nw-cols-imp{display:block;}
+.nw-root .nw-nums span,.nw-root .nw-cols-nums span{text-align:right;}
+.nw-root .nw-nums span{font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--muted);}
+.nw-root .nw-nums .has-actual{color:var(--ic);font-weight:800;}
+.nw-root .nw-imp-label{display:inline;}
+.nw-root .nw-side{justify-content:space-between;}
+}
+@media (max-width:520px){
+.nw-root .nw-fgrid{grid-template-columns:1fr 1fr;}
+.nw-root .nw-fgrid .nw-dd:nth-child(3){grid-column:1/-1;}
+.nw-root .nw-fgrid .nw-dd:nth-child(2) .nw-dd-menu{left:auto;right:0;}
+.nw-root .nw-fgrid .nw-dd:nth-child(3) .nw-dd-menu{left:0;right:auto;}
+}
+@keyframes nw-pop{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:none;}}
 `;
