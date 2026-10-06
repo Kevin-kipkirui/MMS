@@ -240,15 +240,15 @@ const GROUP_ORDER = ["Upcoming", "Earlier today", "Yesterday", "Older"];
 const SYMBOL_PRIORITY = ["USD", "EUR", "GBP", "JPY", "AUD", "NZD", "CAD", "CHF", "CNY", "XAU", "USOIL", "US500", "BTC"];
 
 // ---------- flags + header helpers ----------
-const FLAG_CODE = {
+export const FLAG_CODE = {
 USD: "us", EUR: "eu", GBP: "gb", JPY: "jp", AUD: "au", NZD: "nz", CAD: "ca",
 CHF: "ch", CNY: "cn", INR: "in", ZAR: "za", MXN: "mx", SEK: "se", NOK: "no",
 SGD: "sg", HKD: "hk", KES: "ke", TRY: "tr", BRL: "br", KRW: "kr",
 };
-const flagUrl = (code) => "https://flagcdn.com/w80/" + code + ".png";
+export const flagUrl = (code) => "https://flagcdn.com/w80/" + code + ".png";
 
 /** item.country (e.g. "de") wins, otherwise the first currency we know a flag for. */
-function flagCodeFor(item) {
+export function flagCodeFor(item) {
 if (item.country) return String(item.country).toLowerCase();
 for (const s of item.symbols) if (FLAG_CODE[s]) return FLAG_CODE[s];
 return null;
@@ -289,7 +289,7 @@ function dayLabel(iso, nowMs) {
 }
 
 /** Fetches one endpoint, refreshes on an interval, only runs while `enabled`. */
-function useFeed(endpoint, enabled, intervalMs) {
+export function useFeed(endpoint, enabled, intervalMs) {
   const [state, setState] = useState({ items: null, loading: true, error: null, updatedAt: null });
 
   const load = useCallback(async () => {

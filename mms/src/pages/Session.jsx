@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import Login from "./Login";
 import { supabase } from "../lib/supabase";
 import { pullAll, pushSettings, pushDay, pushHistory } from "../lib/sync";
+import { useFeed, normalizeImpact, flagCodeFor, flagUrl, FLAG_CODE } from "../components/News";
 
 /**
  * <Session />
@@ -116,6 +117,14 @@ const SCHEDULE = {
 const ALL_BLOCKS = [...SCHEDULE.prep, ...SCHEDULE.session, ...SCHEDULE.close];
 const IMPACT_RULE = { high: "Stand aside", med: "Half size", low: "Trade as normal" };
 const IMPACT_LABEL = { high: "Red · High impact", med: "Orange · Medium impact", low: "Yellow · Low impact" };
+// ---------- auto news (focus markets) ----------
+const FOCUS_OPTIONS = ["USD", "EUR", "GBP", "JPY", "AUD", "NZD", "CAD", "CHF", "XAU", "USOIL", "US500", "BTC"];
+const IMPACT_RANK = { low: 1, med: 2, high: 3 };
+const MIN_IMPACT_OPTIONS = [
+  { k: "all", l: "All" },
+  { k: "med", l: "Medium+" },
+  { k: "high", l: "High only" },
+];
 // A trade with P&L strictly between -BE_LIMIT and +BE_LIMIT counts as break-even
 const BE_LIMIT = 10;
 const isBreakEven = (v) => Math.abs(v) < BE_LIMIT;
@@ -934,6 +943,43 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews } 
     return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
   }, []);
 
+  // ---------- auto news: today's events for your focus markets ----------
+  const [focus, setFocus] = useLocalStorageState("td_focus", ["USD"]);
+  const [minImpact, setMinImpact] = useLocalStorageState("td_newsMin", "med");
+  const calFeed = useFeed("/api/economic-calendar", !!userId, 15 * 60 * 1000);
+
+  const autoNews = useMemo(() => {
+    const floor = minImpact === "all" ? 1 : IMPACT_RANK[minImpact] || 1;
+    const out = [];
+    (calFeed.items || []).forEach((raw, idx) => {
+      const iso = raw.time || raw.publishedAt || raw.date;
+      const d = iso ? new Date(iso) : null;
+      if (!d || isNaN(d.getTime()) || todayKey(d) !== dayDate) return; // today only
+      const symbols = raw.symbols || raw.currencies || [];
+      if (!symbols.some((s) => focus.includes(s) || s === "ALL")) return; // focus markets only
+      const norm = normalizeImpact(raw.impact);
+      const impact = norm === "medium" ? "med" : norm; // Session uses "med"
+      if (IMPACT_RANK[impact] < floor) return;
+      out.push({
+        id: "auto-" + (raw.id != null ? raw.id : idx),
+        title: raw.title || raw.headline || "Untitled",
+        time: pad(d.getHours()) + ":" + pad(d.getMinutes()),
+        impact,
+        symbols,
+        country: raw.country || raw.countryCode || null,
+        auto: true,
+      });
+    });
+    return out;
+  }, [calFeed.items, focus, minImpact, dayDate]);
+
+  // auto events + any older manual ones already saved for today
+  const todaysNews = useMemo(() => [...autoNews, ...day.news], [autoNews, day.news]);
+
+  const toggleFocus = (s) =>
+    setFocus((f) => (f.includes(s) ? (f.length > 1 ? f.filter((x) => x !== s) : f) : [...f, s]));
+  // always keeps at least one focus market selected.
+
   // ---------- derived values ----------
   const netPnl = useMemo(() => day.pnl.reduce((a, b) => a + b, 0), [day.pnl]);
 
@@ -958,13 +1004,13 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews } 
 
   const liveHighImpact = useMemo(() => {
     return (
-      day.news
+      todaysNews
         .filter((n) => n.impact === "high" && toMin(n.time) !== null)
         .map((n) => ({ title: n.title, time: n.time, m: toMin(n.time) }))
         .filter((n) => nowMin >= n.m - 30 && nowMin <= n.m + 15)
         .sort((a, b) => a.m - b.m)[0] || null
     );
-  }, [day.news, nowMin]);
+  }, [todaysNews, nowMin]);
 
   const stopband = useMemo(() => {
     if (netPnl <= -maxLoss) {
@@ -1005,8 +1051,8 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews } 
   const goalHit = dailyTarget > 0 && netPnl >= dailyTarget;
 
   const sortedNews = useMemo(
-    () => day.news.slice().sort((a, b) => (toMin(a.time) ?? 1e9) - (toMin(b.time) ?? 1e9)),
-    [day.news]
+    () => todaysNews.slice().sort((a, b) => (toMin(a.time) ?? 1e9) - (toMin(b.time) ?? 1e9)),
+    [todaysNews]
   );
   const highNews = sortedNews.filter((n) => n.impact === "high");
 
@@ -1092,13 +1138,13 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews } 
   // ---------- news alert popup (fires when an event is within 30 min) ----------
   const pendingAlert = useMemo(() => {
     return (
-      day.news
+      todaysNews
         .filter((n) => !alerted.includes(n.id) && toMin(n.time) !== null)
         .map((n) => ({ ...n, minsLeft: toMin(n.time) - nowMin }))
         .filter((n) => n.minsLeft > 0 && n.minsLeft <= 30)
         .sort((a, b) => a.minsLeft - b.minsLeft)[0] || null
     );
-  }, [day.news, alerted, nowMin]);
+  }, [todaysNews, alerted, nowMin]);
 
   // short vibration on phones when the popup appears
   const pendingAlertId = pendingAlert ? pendingAlert.id : null;
@@ -1281,7 +1327,7 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews } 
     net: netPnl,
     maxLoss,
     energy: day.energy,
-    news: day.news.map((n) => ({ time: n.time, title: n.title, impact: n.impact })),
+    news: todaysNews.map((n) => ({ time: n.time, title: n.title, impact: n.impact })),
     note: logForm.note.trim(),
     stoppedOnTime: !!day.checks["eod"],
     trades: day.pnl.map((v, i) => ({ v, m: day.times && day.times[i] != null ? day.times[i] : null })),
@@ -1600,35 +1646,127 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews } 
           )}
         </div>
 
-        <h2 className="section" id="ts-news">Today's news<span className="sub">fill this in before 11:00, not after a bad trade</span></h2>
+        <h2 className="section" id="ts-news">Today's news<span className="sub">fetched automatically for your focus</span></h2>
         <div className="newscard">
-          <div className="newsform">
-            <input ref={newsTitleRef} type="text" placeholder="Event or headline" value={newsTitle}
-              onChange={(e) => setNewsTitle(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addNews(); } }} />
-            <input type="time" value={newsTime} onChange={(e) => setNewsTime(e.target.value)} />
-            <select value={newsImpact} onChange={(e) => setNewsImpact(e.target.value)}>
-              <option value="high">Red — high impact</option>
-              <option value="med">Orange — medium</option>
-              <option value="low">Yellow — low</option>
-            </select>
-            <button onClick={addNews}>Add event</button>
+          <div className="newslabel" style={{ marginBottom: 10, fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>
+            Focus of the day
+          </div>
+
+          <div className="newsfocus" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+            {FOCUS_OPTIONS.map((s) => {
+              const code = FLAG_CODE[s];
+              const active = focus.includes(s);
+              return (
+                <button
+                  type="button"
+                  key={s}
+                  className={`newsfocusbtn ${active ? "active" : ""}`}
+                  onClick={() => toggleFocus(s)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "7px 10px",
+                    borderRadius: 999,
+                    border: active ? "1px solid transparent" : "1px solid var(--border)",
+                    background: active ? "var(--btn)" : "var(--surface-2)",
+                    color: active ? "var(--on-accent)" : "var(--text)",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {code && (
+                    <img
+                      src={flagUrl(code)}
+                      alt=""
+                      style={{ width: 16, height: 16, borderRadius: "50%", objectFit: "cover" }}
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
+                    />
+                  )}
+                  {s}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="newsfilters" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+            {MIN_IMPACT_OPTIONS.map((o) => (
+              <button
+                key={o.k}
+                type="button"
+                className={`newsfilter ${minImpact === o.k ? "active" : ""}`}
+                onClick={() => setMinImpact(o.k)}
+                style={{
+                  padding: "7px 10px",
+                  borderRadius: 999,
+                  border: minImpact === o.k ? "1px solid transparent" : "1px solid var(--border)",
+                  background: minImpact === o.k ? "var(--surface-2)" : "transparent",
+                  color: minImpact === o.k ? "var(--text)" : "var(--muted)",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                {o.l}
+              </button>
+            ))}
+
+            <button
+              type="button"
+              className="newsrefresh"
+              onClick={() => calFeed.reload && calFeed.reload()}
+              style={{
+                marginLeft: "auto",
+                padding: "7px 10px",
+                borderRadius: 999,
+                border: "1px solid var(--border)",
+                background: "var(--surface-2)",
+                color: "var(--text)",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Refresh
+            </button>
+          </div>
+
+          <div className="newsmeta" style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>
+            {calFeed.loading && calFeed.items === null
+              ? "Fetching today's events…"
+              : calFeed.error && calFeed.items === null
+              ? "Couldn't load the calendar. Tap refresh to retry."
+              : sortedNews.length === 0
+              ? "No events today for your focus markets."
+              : `${sortedNews.length} ${sortedNews.length === 1 ? "event" : "events"} today for ${focus.join(", ")}.`}
           </div>
 
           <div>
-            {sortedNews.length === 0 ? (
-              <div className="newsempty" />
-            ) : (
-              sortedNews.map((n) => (
-                <div className="newsitem" key={n.id}>
+            {sortedNews.map((n) => {
+              const code = flagCodeFor({ country: n.country, symbols: n.symbols || [] });
+              return (
+                <div className="newsitem" key={n.id || n.title + n.time}>
                   <span className={`impact ${n.impact}`} />
                   <span className="ntime">{n.time || "--:--"}</span>
+                  {code && (
+                    <img
+                      src={flagUrl(code)}
+                      alt=""
+                      style={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover" }}
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
+                    />
+                  )}
                   <span className="ntitle">{n.title}</span>
                   <span className="nrule">{IMPACT_RULE[n.impact]}</span>
-                  <button className="ndel" aria-label={"Remove " + n.title} onClick={() => removeNews(n.id)}>&times;</button>
+                  {!n.auto && (
+                    <button className="ndel" aria-label={"Remove " + n.title} onClick={() => removeNews(n.id)}>
+                      &times;
+                    </button>
+                  )}
                 </div>
-              ))
-            )}
+              );
+            })}
           </div>
 
           {highNews.length > 0 && (
@@ -2427,4 +2565,19 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
   96%{opacity:.9;}
 }
 @media (prefers-reduced-motion:reduce){.ts-root .ts-holo{animation:none;}}
+
+/* ---------- auto news: focus picker ---------- */
+.ts-root .nf-label{font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+.ts-root .nf-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.ts-root .nf-chip{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:var(--r-pill);border:1px solid var(--border);background:var(--surface-2);color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;transition:all .18s ease;}
+.ts-root .nf-chip:hover{color:var(--text);}
+.ts-root .nf-chip[aria-pressed="true"]{border-color:var(--amber);background:var(--amber-dim);color:var(--text);}
+.ts-root .nf-chip img{width:16px;height:16px;border-radius:50%;object-fit:cover;}
+.ts-root .nf-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;}
+.ts-root .nf-seg{display:inline-flex;gap:4px;padding:3px;border-radius:var(--r-pill);background:var(--surface-2);border:1px solid var(--border);}
+.ts-root .nf-seg button{border:none;background:none;color:var(--muted);padding:6px 12px;border-radius:var(--r-pill);font-size:11.5px;font-weight:700;cursor:pointer;}
+.ts-root .nf-seg button[aria-pressed="true"]{background:var(--btn);color:var(--on-accent);}
+.ts-root .nf-status{font-size:12px;color:var(--muted);margin:12px 2px 4px;line-height:1.4;}
+.ts-root .nf-list{margin-top:6px;}
+.ts-root .ts-flag{border-radius:50%;object-fit:cover;flex-shrink:0;box-shadow:0 0 0 1.5px var(--border);}
 `;
