@@ -409,7 +409,7 @@ export default function News({
   useEffect(() => {
     if (!useRemote) return;
     load();
-    const id = setInterval(load, 10 * 60 * 1000); // refresh every 10 min (Alpha Vantage free tier is rate limited)
+    const id = setInterval(load, 30 * 60 * 1000); // refresh every 30 min to stay under the API daily limit
     return () => clearInterval(id);
   }, [useRemote, load]);
 

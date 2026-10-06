@@ -1,223 +1,168 @@
-const ALPHA_VANTAGE_URL = "https://www.alphavantage.co/query";
+const MARKETAUX_URL = "https://api.marketaux.com/v1/news/all";
 
-function parseAlphaVantageTime(value) {
-  if (!value) return null;
+// Each page costs one API request. The free plan returns only a few
+// articles per request, so raise this only if your plan allows it.
+const PAGES = 1;
 
-  // Alpha Vantage format: YYYYMMDDTHHMMSS
-  const match = String(value).match(
-    /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/
-  );
+// Macro-focused search (Marketaux supports | for OR and quotes for phrases)
+const SEARCH =
+  '"federal reserve" | inflation | "interest rates" | payrolls | ECB | "bank of england" | GDP | OPEC | tariffs | "central bank"';
 
-  if (!match) return null;
+// Keep results in memory for a while so you don't burn your daily quota
+const CACHE_MS = 15 * 60 * 1000;
+let cache = { at: 0, payload: null };
 
-  const [, year, month, day, hour, minute, second] = match;
+const HIGH_RE =
+  /\b(federal reserve|fomc|powell|cpi|inflation|payrolls?|non-?farm|rate (decision|hike|cut)|interest rates?|ecb|lagarde|bank of japan|boj|bank of england|gdp|tariffs?)\b/;
+const MED_RE =
+  /\b(fed|unemployment|jobs|treasury|yields?|opec|oil|crude|central bank|recession|retail sales|pmi|dollar|gold)\b/;
 
-  return new Date(
-    `${year}-${month}-${day}T${hour}:${minute}:${second}Z`
-  ).toISOString();
+function getText(a) {
+  return [a.title, a.description, a.snippet].filter(Boolean).join(" ").toLowerCase();
 }
 
-function getCategory(topics = []) {
-  const names = topics
-    .map((topic) => topic?.topic)
-    .filter(Boolean);
-
-  if (names.includes("economy_macro")) return "Macro";
-  if (names.includes("economy_monetary")) return "Central Banks";
-  if (names.includes("economy_fiscal")) return "Fiscal";
-  if (names.includes("financial_markets")) return "Markets";
-  if (names.includes("energy_transportation")) return "Energy";
-
-  return names[0] || "General";
-}
-
-function getSymbols(item) {
-  const symbols = new Set();
-
-  for (const ticker of item?.ticker_sentiment || []) {
-    const tickerSymbol = ticker?.ticker;
-
-    if (!tickerSymbol) continue;
-
-    // Alpha Vantage can return things like:
-    // "FOREX:USD"
-    // "CRYPTO:BTC"
-    // "AAPL"
-    if (tickerSymbol.includes(":")) {
-      const [, symbol] = tickerSymbol.split(":");
-      if (symbol) symbols.add(symbol);
-    } else {
-      symbols.add(tickerSymbol);
-    }
-  }
-
-  // Add USD for major macro/monetary news.
-  const topics = (item?.topics || []).map((topic) => topic?.topic);
-
-  if (
-    topics.includes("economy_macro") ||
-    topics.includes("economy_monetary") ||
-    topics.includes("economy_fiscal")
-  ) {
-    symbols.add("USD");
-  }
-
-  return Array.from(symbols).slice(0, 8);
-}
-
-function getImpact(item) {
-  const topics = (item?.topics || []).map((topic) => topic?.topic);
-
-  const macroTopics = [
-    "economy_macro",
-    "economy_monetary",
-    "economy_fiscal",
-  ];
-
-  const hasMacroTopic = topics.some((topic) =>
-    macroTopics.includes(topic)
-  );
-
-  const sentimentScore = Math.abs(
-    Number(item?.overall_sentiment_score || 0)
-  );
-
-  /*
-   * This is NOT an official economic-calendar impact rating.
-   * It is simply a relevance estimate for the UI.
-   */
-  if (hasMacroTopic && sentimentScore >= 0.35) {
-    return "high";
-  }
-
-  if (hasMacroTopic || sentimentScore >= 0.2) {
-    return "medium";
-  }
-
+function getImpact(a) {
+  const t = getText(a);
+  if (HIGH_RE.test(t)) return "high";
+  if (MED_RE.test(t)) return "medium";
   return "low";
 }
 
-function normalizeArticle(article, index) {
-  const time = parseAlphaVantageTime(article?.time_published);
+function getCategory(a) {
+  const t = getText(a);
+  if (/\b(federal reserve|fomc|powell|ecb|lagarde|bank of japan|boj|bank of england|central bank|interest rates?|rate (decision|hike|cut))\b/.test(t)) return "Central banks";
+  if (/\b(cpi|inflation|gdp|jobs|payrolls?|non-?farm|unemployment|pmi|retail sales|recession)\b/.test(t)) return "Economy";
+  if (/\b(oil|opec|crude|gold)\b/.test(t)) return "Commodities";
+  if (/\b(bitcoin|crypto|ethereum)\b/.test(t)) return "Crypto";
+  if (/\b(dollar|yen|euro|sterling|forex)\b/.test(t)) return "Forex";
+  return "Markets";
+}
 
+function getSymbols(a) {
+  const out = new Set();
+  const t = getText(a);
+  if (/\b(fed|federal reserve|fomc|powell|dollar|treasury)\b/.test(t)) out.add("USD");
+  if (/\b(ecb|euro|eurozone|lagarde)\b/.test(t)) out.add("EUR");
+  if (/\b(boj|yen|bank of japan)\b/.test(t)) out.add("JPY");
+  if (/\b(bank of england|sterling|pound)\b/.test(t)) out.add("GBP");
+  if (/\bgold\b/.test(t)) out.add("XAU");
+  if (/\b(oil|opec|crude)\b/.test(t)) out.add("USOIL");
+  if (/\b(bitcoin|crypto)\b/.test(t)) out.add("BTC");
+  (a.entities || []).forEach((e) => {
+    if (e && e.symbol) out.add(e.symbol);
+  });
+  return Array.from(out).slice(0, 6);
+}
+
+function normalizeArticle(a, index) {
   return {
-    id:
-      article?.uuid ||
-      article?.url ||
-      `alpha-news-${index}`,
-
-    title:
-      article?.title ||
-      "Untitled",
-
-    summary:
-      article?.summary ||
-      "",
-
-    source:
-      article?.source ||
-      "Alpha Vantage",
-
-    category:
-      getCategory(article?.topics),
-
-    time,
-
-    impact:
-      getImpact(article),
-
-    symbols:
-      getSymbols(article),
-
-    // NEWS_SENTIMENT does not provide economic-calendar
-    // forecast/actual/previous values.
+    id: a.uuid || a.url || "marketaux-" + index,
+    title: a.title || "Untitled",
+    summary: a.description || a.snippet || "",
+    source: a.source || "Marketaux",
+    category: getCategory(a),
+    time: a.published_at || null, // already an ISO UTC string
+    impact: getImpact(a),
+    symbols: getSymbols(a),
     actual: null,
     forecast: null,
     previous: null,
-
-    url:
-      article?.url ||
-      null,
+    url: a.url || null,
   };
+}
+
+async function fetchPage(token, page, publishedAfter) {
+  const params = new URLSearchParams({
+    api_token: token,
+    search: SEARCH,
+    language: "en",
+    published_after: publishedAfter,
+    page: String(page),
+  });
+  const r = await fetch(`${MARKETAUX_URL}?${params.toString()}`);
+  const data = await r.json().catch(() => null);
+  return { ok: r.ok, status: r.status, data };
 }
 
 export default async function handler(req, res) {
   if (req.method !== "GET") {
-    return res.status(405).json({
-      error: "Method not allowed",
-    });
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const apiKey = process.env.ALPHA_VANTAGE_API_KEY;
+  const token = process.env.MARKETAUX_API_TOKEN;
+  if (!token) {
+    return res.status(500).json({ error: "MARKETAUX_API_TOKEN is not configured." });
+  }
 
-  if (!apiKey) {
-    return res.status(500).json({
-      error: "ALPHA_VANTAGE_API_KEY is not configured.",
-    });
+  // Serve from memory if still fresh
+  if (cache.payload && Date.now() - cache.at < CACHE_MS) {
+    res.setHeader("Cache-Control", "s-maxage=900, stale-while-revalidate=300");
+    return res.status(200).json(cache.payload);
   }
 
   try {
-    const params = new URLSearchParams({
-      function: "NEWS_SENTIMENT",
-      topics: "economy_macro",
-      sort: "LATEST",
-      limit: "30",
-      apikey: apiKey,
-    });
+    // Last 48 hours, UTC, format Y-m-dTH:i:s (no trailing Z)
+    const publishedAfter = new Date(Date.now() - 48 * 3600 * 1000)
+      .toISOString()
+      .slice(0, 19);
 
-    const response = await fetch(
-      `${ALPHA_VANTAGE_URL}?${params.toString()}`
-    );
+    const articles = [];
+    for (let page = 1; page <= PAGES; page++) {
+      const { ok, status, data } = await fetchPage(token, page, publishedAfter);
 
-    if (!response.ok) {
-      return res.status(502).json({
-        error: "Alpha Vantage request failed.",
-        status: response.status,
-      });
+      if (!ok) {
+        const code = data && data.error && data.error.code;
+        const message = data && data.error && data.error.message;
+
+        // If we have older data, show it instead of an error
+        if (cache.payload) {
+          res.setHeader("Cache-Control", "no-store");
+          return res.status(200).json(cache.payload);
+        }
+        if (code === "usage_limit_reached" || code === "rate_limit_reached") {
+          return res.status(429).json({
+            error: "News limit reached for now. It will refresh automatically later.",
+          });
+        }
+        if (code === "invalid_api_token") {
+          return res.status(500).json({ error: "The Marketaux API token is invalid." });
+        }
+        return res.status(502).json({
+          error: message || "News provider request failed (" + status + ").",
+        });
+      }
+
+      const list = Array.isArray(data && data.data) ? data.data : [];
+      articles.push(...list);
+      const meta = (data && data.meta) || {};
+      if (!meta.limit || (meta.returned || list.length) < meta.limit) break;
     }
 
-    const data = await response.json();
-
-    // Alpha Vantage API errors / rate-limit responses
-    if (data["Error Message"]) {
-      return res.status(502).json({
-        error: data["Error Message"],
-      });
-    }
-
-    if (data["Information"]) {
-      return res.status(429).json({
-        error: data["Information"],
-      });
-    }
-
-    if (data["Note"]) {
-      return res.status(429).json({
-        error: data["Note"],
-      });
-    }
-
-    const feed = Array.isArray(data?.feed)
-      ? data.feed
-      : [];
-
-    const items = feed
+    const seen = new Set();
+    const items = articles
+      .filter((a) => a && a.title && a.published_at)
+      .filter((a) => {
+        const key = a.uuid || a.url;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
       .map(normalizeArticle)
-      .filter((item) => item.title)
-      .filter((item) => item.time)
-      .slice(0, 30);
+      .filter((i) => i.time)
+      .sort((a, b) => new Date(b.time) - new Date(a.time));
 
-    res.setHeader("Cache-Control", "s-maxage=900, stale-while-revalidate=300");
-    return res.status(200).json({
+    const payload = {
       items,
       updatedAt: new Date().toISOString(),
-      source: "Alpha Vantage",
-    });
+      source: "Marketaux",
+    };
+    cache = { at: Date.now(), payload };
+
+    res.setHeader("Cache-Control", "s-maxage=900, stale-while-revalidate=300");
+    return res.status(200).json(payload);
   } catch (error) {
     console.error("Economic news error:", error);
-
-    return res.status(500).json({
-      error: "Unable to fetch economic news.",
-    });
+    if (cache.payload) return res.status(200).json(cache.payload);
+    return res.status(500).json({ error: "Unable to fetch economic news." });
   }
 }
