@@ -223,9 +223,9 @@ function SectionMenu({ value, options, counts, total, showAll, onChange, onCreat
     const sel = value === v;
     return (
       <button type="button" role="option" aria-selected={sel} className={`np-dd-opt${sel ? " sel" : ""}`} onClick={() => pick(v)}>
-        {text}
-        {n}
-        {sel ? "✓" : ""}
+        <span className="nm">{text}</span>
+        <span className="ct">{n}</span>
+        <span className="ck">{sel ? "✓" : ""}</span>
       </button>
     );
   };
@@ -239,9 +239,13 @@ function SectionMenu({ value, options, counts, total, showAll, onChange, onCreat
         aria-expanded={open}
         onClick={() => (open ? close() : setOpen(true))}
       >
-        {label}
-        {current}
-        {count}
+        <span className="np-dd-ico">▣</span>
+        <span className="np-dd-text">
+          <span className="np-dd-label">{label}</span>
+          <span className="np-dd-value">{current}</span>
+        </span>
+        <span className="np-dd-count">{count}</span>
+        <span className="np-dd-chev">▾</span>
       </button>
       {open && (
         <div className="np-dd-menu" role="listbox" aria-label={label} ref={listRef} onKeyDown={onListKey}>
@@ -342,24 +346,31 @@ function CameraModal({ onCapture, onClose, onFallback }) {
     : "Couldn't start the camera.";
 
   return (
-    <div className="np-cam-backdrop" onClick={onClose}>
-      <div className="np-cam" onClick={(e) => e.stopPropagation()}>
+    <div className="np-cam" onClick={onClose}>
+      <div className="np-cam-stage" onClick={(e) => e.stopPropagation()}>
         <video ref={videoRef} playsInline muted autoPlay className={`np-cam-video${facing === "user" ? " mirror" : ""}`} />
-        {!ready && !err && <div className="np-cam-status">Starting camera…</div>}
+        {!ready && !err && (
+          <div className="np-cam-msg">
+            <p>Starting camera…</p>
+          </div>
+        )}
         {err && (
-          <div className="np-cam-error">
-            <div>{errText}</div>
+          <div className="np-cam-msg">
+            <p>{errText}</p>
             <button type="button" className="np-cam-side" onClick={onFallback}>Use device camera / files</button>
           </div>
         )}
         <div className={`np-cam-flash${flash ? " on" : ""}`} />
-        <div className="np-cam-actions">
-          <button type="button" className="np-cam-side" onClick={onClose}>Cancel</button>
-          <button type="button" className="np-cam-capture" onClick={snap} disabled={!ready}>Capture</button>
-          <button type="button" className="np-cam-side" onClick={() => setFacing((f) => (f === "environment" ? "user" : "environment"))} disabled={!ready}>
-            Flip
-          </button>
-        </div>
+      </div>
+
+      <div className="np-cam-bar" onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="np-cam-side" onClick={onClose}>Cancel</button>
+        <button type="button" className="np-cam-shutter" onClick={snap} disabled={!ready} aria-label="Capture photo">
+          <span />
+        </button>
+        <button type="button" className="np-cam-side" onClick={() => setFacing((f) => (f === "environment" ? "user" : "environment"))} disabled={!ready}>
+          Flip
+        </button>
       </div>
     </div>
   );
@@ -787,21 +798,23 @@ function NoteEditor({ draft, setDraft, sections, counts, isNew, onSave, onCancel
         {/* formatting toolbar */}
 
         <div className="np-toolbar" role="toolbar" aria-label="Formatting">
-          {BLOCK_TOOLS.map((t) => (
-            <button
-              key={t.type}
-              type="button"
-              className={`np-tool${activeType === t.type ? " on" : ""}`}
-              title={t.label}
-              aria-label={t.label}
-              aria-pressed={activeType === t.type}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => applyTool(t.type)}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
+          <div className="np-toolbar-scroll">
+            {BLOCK_TOOLS.map((t) => (
+              <button
+                key={t.type}
+                type="button"
+                className={`np-tool${activeType === t.type ? " on" : ""}`}
+                title={t.label}
+                aria-label={t.label}
+                aria-pressed={activeType === t.type}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => applyTool(t.type)}
+              >
+                <span className="np-tool-ico">{t.icon}</span>
+                <span className="np-tool-lbl">{t.label}</span>
+              </button>
+            ))}
+          </div>
 
           <div className="np-photo-wrap" ref={photoWrapRef}>
             <button
@@ -834,21 +847,16 @@ function NoteEditor({ draft, setDraft, sections, counts, isNew, onSave, onCancel
         {/* blocks */}
         <div className="np-canvas" onClick={(e) => { if (e.target === e.currentTarget) addBlockAtEnd(); }}>
           {(images.length > 0 || photoBusy) && (
-            <div className="np-photo-grid">
-              <div className="np-photo-head">
-                <span>Photos</span>
-                <small>{images.length}/{MAX_IMAGES}</small>
-              </div>
-              <div className="np-photo-list">
+            <div className="np-photos">
+              <div className="np-photos-head"><span>Photos</span><span>{images.length}/{MAX_IMAGES}</span></div>
+              <div className="np-photos-grid">
                 {images.map((im) => (
-                  <div key={im.id} className="np-photo-item">
+                  <div className="np-photo" key={im.id}>
                     <NoteImage img={im} className="np-photo-img" onClick={() => onOpenImage && onOpenImage(im)} />
-                    <button type="button" className="np-photo-x" aria-label="Remove photo" onClick={() => removeImage(im.id)}>
-                      ×
-                    </button>
+                    <button type="button" className="np-photo-x" aria-label="Remove photo" onClick={() => removeImage(im.id)}>&times;</button>
                   </div>
                 ))}
-                {photoBusy && <div className="np-photo-busy">Adding…</div>}
+                {photoBusy && <div className="np-photo np-img-ph" />}
               </div>
             </div>
           )}
@@ -1712,15 +1720,6 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .np-dd-field .np-dd-value{font-size:13px;max-width:130px;}
 .np-dd-field .np-dd-menu{right:auto;width:250px;}
 
-.np-toolbar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface-2);}
-.np-toolbar-scroll{flex:1;min-width:0;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;}
-.np-toolbar-scroll::-webkit-scrollbar{display:none;}
-.np-photo-wrap{position:relative;flex-shrink:0;padding-left:8px;border-left:1px solid var(--border);}
-.np-photo-menu{position:absolute;right:0;top:calc(100% + 12px);z-index:30;min-width:250px;padding:8px;border-radius:18px;background:var(--sheet-bg);border:1px solid var(--border);box-shadow:0 28px 54px -18px rgba(0,0,0,.75);animation:np-dd-in .16s ease;}
-.np-photo-menu button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;background:none;border:none;color:var(--text);padding:11px 12px;border-radius:13px;font-size:13.5px;font-weight:700;cursor:pointer;}
-.np-photo-menu button:hover{background:var(--surface-2);}
-.np-photo-menu small{font-size:11.5px;color:var(--muted);font-weight:500;}
-
 .np-toolrow{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:6px;}
 .np-dd-filter{flex:1 1 100%;}
 @media (min-width:760px){.np-dd-filter{flex:0 0 260px;}}
@@ -1792,8 +1791,6 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .np-title-input{width:100%;background:none;border:none;outline:none;color:var(--text);font-size:clamp(24px,5vw,30px);font-weight:800;letter-spacing:-.03em;padding:4px 0 10px;}
 .np-title-input::placeholder{color:var(--muted);opacity:.7;}
 .np-meta-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;}
-.np-select-wrap{display:inline-flex;align-items:center;gap:8px;font-size:11.5px;font-weight:700;color:var(--muted);}
-.np-select-wrap select{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;color:var(--text);padding:7px 10px;font-size:12.5px;font-weight:600;cursor:pointer;max-width:150px;}
 .np-colors{display:inline-flex;gap:7px;align-items:center;}
 .np-swatch{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--border);cursor:pointer;padding:0;transition:transform .15s ease;}
 .np-swatch.none{background-image:linear-gradient(135deg,transparent 45%,var(--muted) 46%,var(--muted) 54%,transparent 55%);}
