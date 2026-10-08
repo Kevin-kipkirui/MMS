@@ -714,6 +714,86 @@ function HoloClock() {
   );
 }
 
+// ---------- floating news + P&L ticker ----------
+function Ticker({ news, nowMin, netPnl, trades, tradeLimit, maxLoss, fmt, money, loading }) {
+  const items = [];
+
+  if (news.length === 0) {
+    items.push({
+      key: "nonews",
+      kind: "info",
+      text: loading ? "Fetching today's news…" : "No news events today for your focus markets",
+    });
+  } else {
+    news.forEach((n) => {
+      const m = toMin(n.time);
+      items.push({
+        key: n.id || n.title + n.time,
+        kind: "news",
+        impact: n.impact,
+        time: n.time || "--:--",
+        text: n.title,
+        rule: IMPACT_RULE[n.impact],
+        past: m !== null && m < nowMin - 15,
+      });
+    });
+  }
+
+  const tone = netPnl > 0 ? "pos" : netPnl < 0 ? "neg" : "";
+  items.push({ key: "pnl", kind: "pnl", label: "Net today", value: fmt(netPnl), tone });
+  items.push({ key: "trades", kind: "stat", label: "Trades", value: `${trades}/${tradeLimit}` });
+  items.push({
+    key: "room",
+    kind: "stat",
+    label: "Room left",
+    value: money(Math.max(0, maxLoss + Math.min(0, netPnl))),
+  });
+
+  const chars = items.reduce(
+    (a, it) => a + (it.text ? it.text.length : 0) + (it.label ? it.label.length : 0) + 14,
+    0
+  );
+  const duration = Math.max(24, Math.round(chars * 0.26));
+
+  const renderGroup = (suffix) => (
+    <div className="ts-ticker-group" key={suffix} aria-hidden={suffix === "b" ? "true" : undefined}>
+      {items.map((it) => {
+        if (it.kind === "news") {
+          return (
+            <span className={`ts-tk-item${it.past ? " past" : ""}`} key={it.key + suffix}>
+              <span className={`impact ${it.impact}`} />
+              {it.time}
+              {it.text}
+              {it.rule}
+            </span>
+          );
+        }
+        if (it.kind === "info") {
+          return (
+            <span className="ts-tk-item" key={it.key + suffix}>
+              {it.text}
+            </span>
+          );
+        }
+        return (
+          <span className="ts-tk-item" key={it.key + suffix}>
+            {it.label}
+            <span className={`ts-tk-val ${it.tone || ""}`}>{it.value}</span>
+          </span>
+        );
+      })}
+      ◆
+    </div>
+  );
+
+  return (
+    <div className="ts-ticker-track" style={{ animationDuration: duration + "s" }}>
+      {renderGroup("a")}
+      {renderGroup("b")}
+    </div>
+  );
+}
+
 // ---------- component ----------
 export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews } = {}) {
   const [authUser, setAuthUser] = useState(null);
@@ -1465,6 +1545,19 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews } 
   return (
     <div className="ts-root" data-theme={theme}>
       <style>{CSS}</style>
+
+      <Ticker
+        news={sortedNews}
+        nowMin={nowMin}
+        netPnl={netPnl}
+        trades={day.pnl.length}
+        tradeLimit={tradeLimit}
+        maxLoss={maxLoss}
+        fmt={fmt}
+        money={money}
+        loading={calFeed.loading && calFeed.items === null}
+      />
+
       <div className="wrap">
         <header className="top" id="ts-top">
           <div className="brand">
@@ -2580,4 +2673,32 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .ts-root .nf-status{font-size:12px;color:var(--muted);margin:12px 2px 4px;line-height:1.4;}
 .ts-root .nf-list{margin-top:6px;}
 .ts-root .ts-flag{border-radius:50%;object-fit:cover;flex-shrink:0;box-shadow:0 0 0 1.5px var(--border);}
+
+/* ---------- floating news + P&L ticker ---------- */
+.ts-root .ts-ticker{position:fixed;top:0;left:0;right:0;z-index:60;padding-top:env(safe-area-inset-top,0px);background:var(--dock-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border-bottom:1px solid var(--border);box-shadow:0 10px 24px -14px rgba(2,10,30,.6);overflow:hidden;}
+.ts-root .ts-ticker-viewport{height:36px;overflow:hidden;display:flex;align-items:center;}
+.ts-root .ts-ticker-track{display:flex;width:max-content;will-change:transform;animation:ts-ticker-scroll linear infinite;}
+.ts-root .ts-ticker:hover .ts-ticker-track,
+.ts-root .ts-ticker:active .ts-ticker-track{animation-play-state:paused;}
+.ts-root .ts-ticker-group{display:flex;align-items:center;flex-shrink:0;min-width:100vw;}
+.ts-root .ts-tk-item{display:inline-flex;align-items:center;gap:8px;padding:0 18px;white-space:nowrap;font-size:12.5px;font-weight:600;color:var(--text);}
+.ts-root .ts-tk-item.past{opacity:.45;}
+.ts-root .ts-tk-item .impact{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.ts-root .ts-tk-time{color:var(--accent-text);font-weight:800;font-variant-numeric:tabular-nums;}
+.ts-root .ts-tk-rule{color:var(--muted);font-weight:500;font-size:11.5px;}
+.ts-root .ts-tk-label{color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;}
+.ts-root .ts-tk-val{font-weight:800;font-variant-numeric:tabular-nums;}
+.ts-root .ts-tk-val.pos{color:var(--teal);}
+.ts-root .ts-tk-val.neg{color:var(--rose);}
+.ts-root .ts-tk-sep{color:var(--amber);opacity:.7;font-size:9px;padding:0 18px;}
+@keyframes ts-ticker-scroll{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+
+/* make room for the fixed ticker */
+.ts-root .wrap{padding-top:62px;}
+.ts-root [id^="ts-"]{scroll-margin-top:52px;}
+
+@media (prefers-reduced-motion:reduce){
+  .ts-root .ts-ticker-track{animation:none;}
+  .ts-root .ts-ticker-viewport{overflow-x:auto;}
+}
 `;
