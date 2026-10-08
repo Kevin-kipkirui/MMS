@@ -808,7 +808,7 @@ function Ticker({ news, nowMin, netPnl, trades, tradeLimit, maxLoss, fmt, money,
 }
 
 // ---------- component ----------
-export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews } = {}) {
+export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, onOpenNotepad } = {}) {
   const [authUser, setAuthUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
 
@@ -1355,6 +1355,13 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews } 
       window.location.hash = "news";
     }
   };
+  const handleGoToNotepad = () => {
+    if (typeof onOpenNotepad === "function") {
+      onOpenNotepad();
+    } else if (typeof window !== "undefined") {
+      window.location.hash = "notepad";
+    }
+  };
 
   const addResult = () => {
     const v = parseFloat(pnlInput);
@@ -1589,6 +1596,9 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews } 
             </button>
             <button className="theme-toggle ts-perf-btn" onClick={handleGoToNews}>
               📰 News
+            </button>
+            <button className="theme-toggle ts-perf-btn" type="button" onClick={handleGoToNotepad}>
+              📝 Notepad
             </button>
           </div>
           <div className="clockbox">

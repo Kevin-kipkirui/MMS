@@ -4,6 +4,7 @@ import Session from "./pages/Session";
 import Summit from "./pages/Summit";
 import Performance from "./pages/Perfomance";
 import News from "./pages/News";
+import Notepad from "./pages/Notepad";
 import { supabase } from "./lib/supabase";
 
 function App() {
@@ -45,6 +46,7 @@ function App() {
       if (hash === "summit") setView("summit");
       else if (hash === "performance") setView("performance");
       else if (hash === "news") setView("news");
+      else if (hash === "notepad") setView("notepad");
       else if (hash === "session" || !hash) setView("session");
     };
 
@@ -69,6 +71,12 @@ function App() {
     if (!isUnlocked) return;
     setView("news");
     if (typeof window !== "undefined") window.location.hash = "#news";
+  };
+
+  const openNotepad = () => {
+    if (!isUnlocked) return;
+    setView("notepad");
+    if (typeof window !== "undefined") window.location.hash = "#notepad";
   };
 
   const backToSession = () => {
@@ -96,11 +104,16 @@ function App() {
     return <News onBack={backToSession} />;
   }
 
+  if (view === "notepad") {
+    return <Notepad onBack={backToSession} />;
+  }
+
   return (
     <Session
       onOpenSummit={openSummit}
       onOpenPerformance={openPerformance}
       onOpenNews={openNews}
+      onOpenNotepad={openNotepad}
     />
   );
 }
