@@ -741,7 +741,7 @@ function Ticker({ news, nowMin, netPnl, trades, tradeLimit, maxLoss, fmt, money,
 
   const tone = netPnl > 0 ? "pos" : netPnl < 0 ? "neg" : "";
   items.push({ key: "pnl", kind: "stat", label: "Net today", value: fmt(netPnl), tone });
-  items.push({ key: "trades", kind: "stat", label: "Trades", value: `${trades}/${tradeLimit}` });
+  items.push({ key: "trades", kind: "stat", label: "Trades", value: trades + "/" + tradeLimit });
   items.push({
     key: "room",
     kind: "stat",
@@ -755,42 +755,55 @@ function Ticker({ news, nowMin, netPnl, trades, tradeLimit, maxLoss, fmt, money,
   );
   const duration = Math.max(24, Math.round(chars * 0.26));
 
-  const renderGroup = (suffix) => (
-    <div className="ts-ticker-group" key={suffix} aria-hidden={suffix === "b" ? "true" : undefined}>
-      {items.map((it) => {
-        if (it.kind === "news") {
-          return (
-            <span className={`ts-tk-item${it.past ? " past" : ""}`} key={it.key + suffix}>
-              <span className={`impact ${it.impact}`} />
-              {it.time}
-              {it.text}
-              {it.rule}
-            </span>
-          );
-        }
-        if (it.kind === "info") {
-          return (
-            <span className="ts-tk-item" key={it.key + suffix}>
-              {it.text}
-            </span>
-          );
-        }
-        return (
-          <span className="ts-tk-item" key={it.key + suffix}>
-            {it.label}
-            <span className={`ts-tk-val ${it.tone || ""}`}>{it.value}</span>
-          </span>
-        );
-      })}
-      ◆
-    </div>
-  );
+  const renderItem = (it, suffix) => {
+    const key = it.key + suffix;
+    if (it.kind === "news") {
+      return ce(
+        "span",
+        { className: "ts-tk-item" + (it.past ? " past" : ""), key },
+        ce("span", { className: "impact " + it.impact }),
+        ce("span", { className: "ts-tk-time" }, it.time),
+        ce("span", { className: "ts-tk-text" }, it.text),
+        ce("span", { className: "ts-tk-rule" }, it.rule)
+      );
+    }
+    if (it.kind === "info") {
+      return ce("span", { className: "ts-tk-item", key }, ce("span", { className: "ts-tk-text" }, it.text));
+    }
+    return ce(
+      "span",
+      { className: "ts-tk-item", key },
+      ce("span", { className: "ts-tk-label" }, it.label),
+      ce("span", { className: "ts-tk-val " + (it.tone || "") }, it.value)
+    );
+  };
 
-  return (
-    <div className="ts-ticker-track" style={{ animationDuration: duration + "s" }}>
-      {renderGroup("a")}
-      {renderGroup("b")}
-    </div>
+  const renderGroup = (suffix) =>
+    ce(
+      "div",
+      { className: "ts-ticker-group", key: suffix, "aria-hidden": suffix === "b" ? "true" : undefined },
+      items.map((it) => renderItem(it, suffix)),
+      ce("span", { className: "ts-tk-sep", "aria-hidden": "true" }, "◆")
+    );
+
+  return ce(
+    "div",
+    {
+      className: "ts-ticker",
+      role: "marquee",
+      "aria-label": "Today's news and P&L",
+      style: { position: "fixed", top: 0, left: 0, right: 0, zIndex: 60, overflow: "hidden" },
+    },
+    ce(
+      "div",
+      { className: "ts-ticker-viewport" },
+      ce(
+        "div",
+        { className: "ts-ticker-track", style: { animationDuration: duration + "s" } },
+        renderGroup("a"),
+        renderGroup("b")
+      )
+    )
   );
 }
 
