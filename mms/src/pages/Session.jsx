@@ -753,7 +753,7 @@ function Ticker({ news, nowMin, netPnl, trades, tradeLimit, maxLoss, fmt, money,
     (a, it) => a + (it.text ? it.text.length : 0) + (it.label ? it.label.length : 0) + 14,
     0
   );
-  const duration = Math.max(24, Math.round(chars * 0.26));
+  const duration = Math.max(40, Math.round(chars * 0.4));
 
   const renderItem = (it, suffix) => {
     const key = it.key + suffix;
@@ -2705,13 +2705,17 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .ts-root .ts-ticker-track{
   display:flex;flex-wrap:nowrap;width:max-content;flex-shrink:0;
   will-change:transform;
+  backface-visibility:hidden;
   animation-name:ts-ticker-scroll;
   animation-timing-function:linear;
   animation-iteration-count:infinite;
-  animation-duration:40s;
+  animation-direction:normal;
+  animation-play-state:running;
+  animation-duration:40s; /* overridden inline by the component based on text length */
 }
-.ts-root .ts-ticker:hover .ts-ticker-track,
-.ts-root .ts-ticker:active .ts-ticker-track{animation-play-state:paused;}
+@media (hover:hover) and (pointer:fine){
+  .ts-root .ts-ticker:hover .ts-ticker-track{animation-play-state:paused;}
+}
 .ts-root .ts-ticker-group{display:flex;align-items:center;flex-shrink:0;min-width:100vw;}
 .ts-root .ts-tk-item{display:inline-flex;align-items:center;gap:8px;padding:0 18px;white-space:nowrap;font-size:12.5px;font-weight:600;color:var(--text);}
 .ts-root .ts-tk-item.past{opacity:.45;}
@@ -2732,8 +2736,4 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .ts-root .wrap{padding-top:62px;}
 .ts-root [id^="ts-"]{scroll-margin-top:52px;}
 
-@media (prefers-reduced-motion:reduce){
-  .ts-root .ts-ticker-track{animation:none;}
-  .ts-root .ts-ticker-viewport{overflow-x:auto;}
-}
 `;
