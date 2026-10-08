@@ -740,7 +740,7 @@ function Ticker({ news, nowMin, netPnl, trades, tradeLimit, maxLoss, fmt, money,
   }
 
   const tone = netPnl > 0 ? "pos" : netPnl < 0 ? "neg" : "";
-  items.push({ key: "pnl", kind: "pnl", label: "Net today", value: fmt(netPnl), tone });
+  items.push({ key: "pnl", kind: "stat", label: "Net today", value: fmt(netPnl), tone });
   items.push({ key: "trades", kind: "stat", label: "Trades", value: `${trades}/${tradeLimit}` });
   items.push({
     key: "room",
@@ -2675,9 +2675,28 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .ts-root .ts-flag{border-radius:50%;object-fit:cover;flex-shrink:0;box-shadow:0 0 0 1.5px var(--border);}
 
 /* ---------- floating news + P&L ticker ---------- */
-.ts-root .ts-ticker{position:fixed;top:0;left:0;right:0;z-index:60;padding-top:env(safe-area-inset-top,0px);background:var(--dock-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border-bottom:1px solid var(--border);box-shadow:0 10px 24px -14px rgba(2,10,30,.6);overflow:hidden;}
-.ts-root .ts-ticker-viewport{height:36px;overflow:hidden;display:flex;align-items:center;}
-.ts-root .ts-ticker-track{display:flex;width:max-content;will-change:transform;animation:ts-ticker-scroll linear infinite;}
+.ts-root{overflow-x:clip;max-width:100vw;}
+
+.ts-root .ts-ticker{
+  position:fixed;top:0;left:0;right:0;z-index:60;
+  width:100%;max-width:100vw;
+  padding-top:env(safe-area-inset-top,0px);
+  background:var(--dock-bg);
+  -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
+  border-bottom:1px solid var(--border);
+  box-shadow:0 10px 24px -14px rgba(2,10,30,.6);
+  overflow:hidden;
+  contain:paint;
+}
+.ts-root .ts-ticker-viewport{height:36px;width:100%;overflow:hidden;display:flex;align-items:center;}
+.ts-root .ts-ticker-track{
+  display:flex;flex-wrap:nowrap;width:max-content;flex-shrink:0;
+  will-change:transform;
+  animation-name:ts-ticker-scroll;
+  animation-timing-function:linear;
+  animation-iteration-count:infinite;
+  animation-duration:40s;
+}
 .ts-root .ts-ticker:hover .ts-ticker-track,
 .ts-root .ts-ticker:active .ts-ticker-track{animation-play-state:paused;}
 .ts-root .ts-ticker-group{display:flex;align-items:center;flex-shrink:0;min-width:100vw;}
@@ -2690,8 +2709,11 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .ts-root .ts-tk-val{font-weight:800;font-variant-numeric:tabular-nums;}
 .ts-root .ts-tk-val.pos{color:var(--teal);}
 .ts-root .ts-tk-val.neg{color:var(--rose);}
-.ts-root .ts-tk-sep{color:var(--amber);opacity:.7;font-size:9px;padding:0 18px;}
-@keyframes ts-ticker-scroll{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+.ts-root .ts-tk-sep{color:var(--amber);opacity:.7;font-size:9px;padding:0 18px;flex-shrink:0;}
+@keyframes ts-ticker-scroll{
+  from{transform:translate3d(0,0,0);}
+  to{transform:translate3d(-50%,0,0);}
+}
 
 /* make room for the fixed ticker */
 .ts-root .wrap{padding-top:62px;}
