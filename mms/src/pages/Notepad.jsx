@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect } from "react";
+import { supabase } from "../lib/supabase";
+import { pullNotes, pushNotes, deleteNotes, pullSections, pushSections, uploadImage, removeImages, signedUrl } from "../lib/notesSync";
 
 /**
  * <Notepad />
@@ -89,6 +91,280 @@ function fmtDate(ts) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
 }
 
+// ---------- photos ----------
+const MAX_IMAGES = 6;
+
+function drawToJpeg(source, sw, sh, maxDim = 1600, quality = 0.8) {
+  const scale = Math.min(1, maxDim / Math.max(sw, sh));
+  const w = Math.round(sw * scale);
+  const h = Math.round(sh * scale);
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(source, 0, 0, w, h);
+  return c.toDataURL("image/jpeg", quality);
+}
+
+function fileToJpeg(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("read"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("decode"));
+      img.onload = () => resolve(drawToJpeg(img, img.width, img.height));
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// signed links are cached so cards don't re-request them on every render
+const urlCache = new Map();
+
+function useImageSrc(img) {
+  const [src, setSrc] = useState(() => {
+    if (img.local) return img.local;
+    const hit = img.path ? urlCache.get(img.path) : null;
+    return hit && hit.exp > Date.now() ? hit.url : "";
+  });
+  useEffect(() => {
+    if (img.local) { setSrc(img.local); return; }
+    if (!img.path) return;
+    const hit = urlCache.get(img.path);
+    if (hit && hit.exp > Date.now()) { setSrc(hit.url); return; }
+    let live = true;
+    signedUrl(img.path)
+      .then((url) => {
+        if (!live || !url) return;
+        urlCache.set(img.path, { url, exp: Date.now() + 50 * 60 * 1000 });
+        setSrc(url);
+      })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [img.local, img.path]);
+  return src;
+}
+
+function NoteImage({ img, className, alt, onClick }) {
+  const src = useImageSrc(img);
+  if (!src) return <div className={`np-img-ph ${className || ""}`} aria-busy="true" />;
+  return (
+    <img
+      className={className}
+      src={src}
+      alt={alt || img.name || "Note photo"}
+      onClick={onClick}
+      loading="lazy"
+      draggable={false}
+    />
+  );
+}
+
+// ---------- section dropdown ----------
+function SectionMenu({ value, options, counts, total, showAll, onChange, onCreate, variant = "filter", label = "Section" }) {
+  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const wrapRef = useRef(null);
+  const listRef = useRef(null);
+
+  const close = useCallback(() => {
+    setOpen(false);
+    setAdding(false);
+    setName("");
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) close(); };
+    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [open, close]);
+
+  useEffect(() => {
+    if (!open || !listRef.current) return;
+    const el = listRef.current.querySelector('[aria-selected="true"]') || listRef.current.querySelector('[role="option"]');
+    if (el) el.focus();
+  }, [open]);
+
+  const onListKey = (e) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const items = Array.from(listRef.current.querySelectorAll('[role="option"]'));
+    const i = items.indexOf(document.activeElement);
+    if (i === -1) return;
+    e.preventDefault();
+    const n = e.key === "ArrowDown" ? Math.min(items.length - 1, i + 1) : Math.max(0, i - 1);
+    items[n].focus();
+  };
+
+  const pick = (v) => { onChange(v); close(); };
+  const submit = () => {
+    const n = name.trim();
+    if (n) onCreate(n);
+    close();
+  };
+
+  const isAll = showAll && value === "All";
+  const current = isAll ? "All notes" : value;
+  const count = isAll ? total : counts[value] || 0;
+
+  const Opt = ({ v, text, n }) => {
+    const sel = value === v;
+    return (
+      <button type="button" role="option" aria-selected={sel} className={`np-dd-opt${sel ? " sel" : ""}`} onClick={() => pick(v)}>
+        {text}
+        {n}
+        {sel ? "✓" : ""}
+      </button>
+    );
+  };
+
+  return (
+    <div className={`np-dd np-dd-${variant}${open ? " open" : ""}`} ref={wrapRef}>
+      <button
+        type="button"
+        className="np-dd-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => (open ? close() : setOpen(true))}
+      >
+        {label}
+        {current}
+        {count}
+      </button>
+      {open && (
+        <div className="np-dd-menu" role="listbox" aria-label={label} ref={listRef} onKeyDown={onListKey}>
+          {showAll && (
+            <>
+              <Opt v="All" text="All notes" n={total} />
+              <div className="np-dd-sep" />
+            </>
+          )}
+          {options.map((s) => (
+            <Opt key={s} v={s} text={s} n={counts[s] || 0} />
+          ))}
+          <div className="np-dd-sep" />
+          {adding ? (
+            <input
+              className="np-dd-input"
+              autoFocus
+              placeholder="Section name, then Enter"
+              value={name}
+              maxLength={24}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+            />
+          ) : (
+            <button type="button" className="np-dd-new" onClick={() => setAdding(true)}>
+              + New section
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- in-app camera ----------
+function CameraModal({ onCapture, onClose, onFallback }) {
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const [facing, setFacing] = useState("environment");
+  const [ready, setReady] = useState(false);
+  const [err, setErr] = useState("");
+  const [flash, setFlash] = useState(false);
+
+  const stop = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    setReady(false);
+    setErr("");
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setErr("unsupported");
+      return;
+    }
+    (async () => {
+      try {
+        stop();
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false,
+        });
+        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
+        streamRef.current = stream;
+        const v = videoRef.current;
+        if (v) {
+          v.srcObject = stream;
+          await v.play();
+          if (!cancelled) setReady(true);
+        }
+      } catch (e) {
+        if (!cancelled) setErr(e && e.name === "NotAllowedError" ? "denied" : "failed");
+      }
+    })();
+    return () => { cancelled = true; stop(); };
+  }, [facing]);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
+
+  const snap = () => {
+    const v = videoRef.current;
+    if (!v || !v.videoWidth) return;
+    setFlash(true);
+    setTimeout(() => setFlash(false), 180);
+    onCapture(drawToJpeg(v, v.videoWidth, v.videoHeight));
+  };
+
+  const errText =
+    err === "denied" ? "Camera access is blocked. Allow it in your browser's site settings, or use the option below."
+    : err === "unsupported" ? "This browser can't open the camera here (it needs a secure https page)."
+    : "Couldn't start the camera.";
+
+  return (
+    <div className="np-cam-backdrop" onClick={onClose}>
+      <div className="np-cam" onClick={(e) => e.stopPropagation()}>
+        <video ref={videoRef} playsInline muted autoPlay className={`np-cam-video${facing === "user" ? " mirror" : ""}`} />
+        {!ready && !err && <div className="np-cam-status">Starting camera…</div>}
+        {err && (
+          <div className="np-cam-error">
+            <div>{errText}</div>
+            <button type="button" className="np-cam-side" onClick={onFallback}>Use device camera / files</button>
+          </div>
+        )}
+        <div className={`np-cam-flash${flash ? " on" : ""}`} />
+        <div className="np-cam-actions">
+          <button type="button" className="np-cam-side" onClick={onClose}>Cancel</button>
+          <button type="button" className="np-cam-capture" onClick={snap} disabled={!ready}>Capture</button>
+          <button type="button" className="np-cam-side" onClick={() => setFacing((f) => (f === "environment" ? "user" : "environment"))} disabled={!ready}>
+            Flip
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------- block row ----------
 function BlockRow({ block, index, numberLabel, registerRef, onChange, onKeyDown, onFocus, onToggle, onRemoveDivider, active }) {
   const taRef = useRef(null);
@@ -147,11 +423,81 @@ function BlockRow({ block, index, numberLabel, registerRef, onChange, onKeyDown,
 }
 
 // ---------- editor ----------
-function NoteEditor({ draft, setDraft, sections, isNew, onSave, onCancel, onDelete, dirty }) {
+function NoteEditor({ draft, setDraft, sections, counts, isNew, onSave, onCancel, onDelete, dirty, onCreateSection, onToast, onOpenImage }) {
   const refs = useRef({});
   const [activeId, setActiveId] = useState(draft.blocks[0] ? draft.blocks[0].id : null);
   const [focusReq, setFocusReq] = useState(null); // { id, end }
   const [tagInput, setTagInput] = useState("");
+
+  // ---------- photos ----------
+  const images = draft.images || [];
+  const [photoMenu, setPhotoMenu] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const fileRef = useRef(null);
+  const camRef = useRef(null);
+  const photoWrapRef = useRef(null);
+
+  useEffect(() => {
+    if (!photoMenu) return;
+    const onDown = (e) => { if (photoWrapRef.current && !photoWrapRef.current.contains(e.target)) setPhotoMenu(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+    };
+  }, [photoMenu]);
+
+  const addImages = (list) => {
+    if (!list.length) return;
+    setDraft((d) => ({ ...d, images: [...(d.images || []), ...list].slice(0, MAX_IMAGES) }));
+  };
+
+  const handleFiles = async (files) => {
+    files = files.filter((f) => f.type && f.type.startsWith("image/"));
+    if (!files.length) { onToast && onToast("Please choose an image file."); return; }
+    const room = MAX_IMAGES - images.length;
+    if (room <= 0) { onToast && onToast("Up to " + MAX_IMAGES + " photos per note."); return; }
+    setPhotoBusy(true);
+    const out = [];
+    for (const f of files.slice(0, room)) {
+      try {
+        out.push({ id: uid("img"), local: await fileToJpeg(f), name: f.name || "photo.jpg" });
+      } catch (e) {
+        onToast && onToast("Couldn't read one of those images.");
+      }
+    }
+    addImages(out);
+    setPhotoBusy(false);
+    if (files.length > room) onToast && onToast("Only " + MAX_IMAGES + " photos fit in one note.");
+  };
+
+  const onPickFiles = (e) => {
+    const list = Array.from(e.target.files || []);
+    e.target.value = "";
+    handleFiles(list);
+  };
+
+  const openUpload = () => {
+    setPhotoMenu(false);
+    if (images.length >= MAX_IMAGES) { onToast && onToast("Up to " + MAX_IMAGES + " photos per note."); return; }
+    if (fileRef.current) fileRef.current.click();
+  };
+
+  const openCamera = () => {
+    setPhotoMenu(false);
+    if (images.length >= MAX_IMAGES) { onToast && onToast("Up to " + MAX_IMAGES + " photos per note."); return; }
+    if (window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) setCameraOpen(true);
+    else if (camRef.current) camRef.current.click();
+  };
+
+  const onCaptured = (dataUrl) => {
+    addImages([{ id: uid("img"), local: dataUrl, name: "capture-" + Date.now() + ".jpg" }]);
+    setCameraOpen(false);
+  };
+
+  const removeImage = (id) => setDraft((d) => ({ ...d, images: (d.images || []).filter((i) => i.id !== id) }));
 
   const registerRef = useCallback((id, el) => {
     if (el) refs.current[id] = el;
@@ -378,14 +724,18 @@ function NoteEditor({ draft, setDraft, sections, isNew, onSave, onCancel, onDele
             }}
           />
           <div className="np-meta-row">
-            <label className="np-select-wrap">
-              <span>Section</span>
-              <select value={draft.section} onChange={(e) => setDraft((d) => ({ ...d, section: e.target.value }))}>
-                {sections.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </label>
+            <SectionMenu
+              variant="field"
+              label="Section"
+              value={draft.section}
+              options={sections}
+              counts={counts || {}}
+              onChange={(v) => setDraft((d) => ({ ...d, section: v }))}
+              onCreate={(n) => {
+                const s = onCreateSection ? onCreateSection(n) : null;
+                if (s) setDraft((d) => ({ ...d, section: s }));
+              }}
+            />
             <div className="np-colors" role="radiogroup" aria-label="Label colour">
               {COLORS.map((c) => (
                 <button
@@ -435,6 +785,7 @@ function NoteEditor({ draft, setDraft, sections, isNew, onSave, onCancel, onDele
         </div>
 
         {/* formatting toolbar */}
+
         <div className="np-toolbar" role="toolbar" aria-label="Formatting">
           {BLOCK_TOOLS.map((t) => (
             <button
@@ -447,14 +798,60 @@ function NoteEditor({ draft, setDraft, sections, isNew, onSave, onCancel, onDele
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => applyTool(t.type)}
             >
-              <span className="np-tool-ico">{t.icon}</span>
-              <span className="np-tool-lbl">{t.label}</span>
+              {t.icon}
+              {t.label}
             </button>
           ))}
+
+          <div className="np-photo-wrap" ref={photoWrapRef}>
+            <button
+              type="button"
+              className={`np-tool np-photo-btn${photoMenu || images.length ? " on" : ""}`}
+              aria-haspopup="menu"
+              aria-expanded={photoMenu}
+              title="Add a photo"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setPhotoMenu((o) => !o)}
+            >
+              <span className="np-tool-ico">📷</span>
+              <span className="np-tool-lbl">{images.length ? "Photos · " + images.length : "Photo"}</span>
+            </button>
+            {photoMenu && (
+              <div className="np-photo-menu" role="menu">
+                <button type="button" role="menuitem" onClick={openCamera}>
+                  📷 Take a photo
+                  <small>Use your camera</small>
+                </button>
+                <button type="button" role="menuitem" onClick={openUpload}>
+                  🖼️ Upload from files
+                  <small>Choose one or more images</small>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* blocks */}
         <div className="np-canvas" onClick={(e) => { if (e.target === e.currentTarget) addBlockAtEnd(); }}>
+          {(images.length > 0 || photoBusy) && (
+            <div className="np-photo-grid">
+              <div className="np-photo-head">
+                <span>Photos</span>
+                <small>{images.length}/{MAX_IMAGES}</small>
+              </div>
+              <div className="np-photo-list">
+                {images.map((im) => (
+                  <div key={im.id} className="np-photo-item">
+                    <NoteImage img={im} className="np-photo-img" onClick={() => onOpenImage && onOpenImage(im)} />
+                    <button type="button" className="np-photo-x" aria-label="Remove photo" onClick={() => removeImage(im.id)}>
+                      ×
+                    </button>
+                  </div>
+                ))}
+                {photoBusy && <div className="np-photo-busy">Adding…</div>}
+              </div>
+            </div>
+          )}
           {draft.blocks.map((b, i) => (
             <BlockRow
               key={b.id}
@@ -483,6 +880,34 @@ function NoteEditor({ draft, setDraft, sections, isNew, onSave, onCancel, onDele
             <span className="np-foot-date">Edited {fmtDate(draft.updatedAt || Date.now())}</span>
           </div>
         )}
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={onPickFiles}
+        />
+        <input
+          ref={camRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          hidden
+          onChange={onPickFiles}
+        />
+
+        {cameraOpen && (
+          <CameraModal
+            onCapture={onCaptured}
+            onClose={() => setCameraOpen(false)}
+            onFallback={() => {
+              setCameraOpen(false);
+              if (camRef.current) camRef.current.click();
+            }}
+          />
+        )}
       </div>
     </div>
   );
@@ -490,6 +915,7 @@ function NoteEditor({ draft, setDraft, sections, isNew, onSave, onCancel, onDele
 
 // ---------- note card ----------
 function NoteCard({ note, onOpen, onPin, onToggleCheck }) {
+  const imgs = note.images || [];
   const preview = useMemo(() => {
     const out = [];
     let n = 0;
@@ -514,6 +940,12 @@ function NoteCard({ note, onOpen, onPin, onToggleCheck }) {
     <article className="np-card np-glass" style={{ "--card-c": colorOf(note.color) }}>
       <div className="np-card-bar" />
       <button type="button" className="np-card-body" onClick={() => onOpen(note.id)}>
+        {imgs.length > 0 && (
+          <div className="np-card-cover">
+            <NoteImage img={imgs[0]} className="np-card-cover-img" />
+            {imgs.length > 1 && <span className="np-card-cover-n">+{imgs.length - 1}</span>}
+          </div>
+        )}
         <div className="np-card-top">
           <span className="np-card-section">{note.section}</span>
           <span className="np-card-date">{fmtDate(note.updatedAt)}</span>
@@ -588,11 +1020,192 @@ export default function Notepad({ onBack, onSaveNote, onDeleteNote } = {}) {
   const [draft, setDraft] = useState(null); // note being edited
   const [draftBase, setDraftBase] = useState("");
   const [isNew, setIsNew] = useState(false);
-  const [addingSection, setAddingSection] = useState(false);
-  const [sectionInput, setSectionInput] = useState("");
+  const [lightbox, setLightbox] = useState(null);
   const [toast, setToast] = useState("");
   const fontLinkAdded = useRef(false);
   const toastTimer = useRef(null);
+
+  // ================= SUPABASE SYNC =================
+  const [userId, setUserId] = useState(null);
+  const [hydrated, setHydrated] = useState(false);
+  const [syncState, setSyncState] = useState("idle"); // idle | syncing | synced | offline
+  const [retryTick, setRetryTick] = useState(0);
+  const [pendingDeletes, setPendingDeletes] = useLocalStorageState("td_notes_deleted", []);
+  const [pendingImgDeletes, setPendingImgDeletes] = useLocalStorageState("td_notes_img_deleted", []);
+  const pushedNotes = useRef({});
+  const pushedSections = useRef("");
+
+  // who is signed in
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (active) setUserId(data.session ? data.session.user.id : null);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setUserId(session ? session.user.id : null);
+    });
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  // retry when the connection comes back
+  useEffect(() => {
+    const onOnline = () => setRetryTick((t) => t + 1);
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, []);
+
+  // 1) On sign-in: pull from Supabase and merge with this device (newest edit wins)
+  useEffect(() => {
+    if (!userId) {
+      if (hydrated) setHydrated(false);
+      pushedNotes.current = {};
+      return;
+    }
+    if (hydrated) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setSyncState("syncing");
+        const [remoteNotes, remoteSections] = await Promise.all([pullNotes(userId), pullSections(userId)]);
+        if (cancelled) return;
+
+        const deleted = new Set(readLS("td_notes_deleted", []));
+        const byId = {};
+        remoteNotes.forEach((n) => { if (!deleted.has(n.id)) byId[n.id] = n; });
+        readLS("td_notes", []).forEach((n) => {
+          if (deleted.has(n.id)) return;
+          const r = byId[n.id];
+          if (!r || (n.updatedAt || 0) > (r.updatedAt || 0)) byId[n.id] = n;
+        });
+        const merged = Object.values(byId).sort((a, b) => b.updatedAt - a.updatedAt);
+
+        // remember what the server already has, so only real changes get pushed
+        const map = {};
+        remoteNotes.forEach((r) => {
+          const m = byId[r.id];
+          if (m && JSON.stringify(m) === JSON.stringify(r)) map[r.id] = JSON.stringify(r);
+        });
+        pushedNotes.current = map;
+        setNotes(merged);
+
+        const secs = [...remoteSections];
+        readLS("td_note_sections", DEFAULT_SECTIONS).forEach((s) => { if (!secs.includes(s)) secs.push(s); });
+        pushedSections.current = JSON.stringify(remoteSections);
+        setSections(secs);
+
+        setHydrated(true);
+        setSyncState("synced");
+      } catch (e) {
+        if (!cancelled) setSyncState("offline");
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, hydrated, retryTick]);
+
+  // uploads photos still held on this device, returns the note carrying storage paths
+  const prepareNote = async (n) => {
+    let ok = true;
+    const images = [];
+    for (const im of n.images || []) {
+      if (im.path) {
+        images.push({ id: im.id, path: im.path, name: im.name || "" });
+        continue;
+      }
+      try {
+        const path = await uploadImage(userId, n.id, im);
+        images.push({ id: im.id, path, name: im.name || "" });
+      } catch (e) {
+        ok = false;
+        images.push(im);
+      }
+    }
+    return { note: { ...n, images }, ok };
+  };
+
+  // 2) Push only the notes that changed (uploads photos first)
+  useEffect(() => {
+    if (!userId || !hydrated) return;
+    const changed = notes.filter((n) => pushedNotes.current[n.id] !== JSON.stringify(n));
+    if (!changed.length) return;
+    const t = setTimeout(async () => {
+      setSyncState("syncing");
+      try {
+        const prepared = [];
+        for (const n of changed) prepared.push(await prepareNote(n));
+        await pushNotes(userId, prepared.map((p) => p.note));
+
+        let allOk = true;
+        const swaps = {};
+        prepared.forEach((p) => {
+          if (p.ok) {
+            pushedNotes.current[p.note.id] = JSON.stringify(p.note);
+            swaps[p.note.id] = p.note;
+          } else {
+            allOk = false;
+          }
+        });
+
+        if (Object.keys(swaps).length) {
+          setNotes((ns) =>
+            ns.map((x) => {
+              const s = swaps[x.id];
+              return s && x.updatedAt === s.updatedAt ? { ...x, images: s.images } : x;
+            })
+          );
+        }
+        setSyncState(allOk ? "synced" : "offline");
+      } catch (e) {
+        setSyncState("offline");
+      }
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, hydrated, retryTick, notes]);
+
+  // 3) Push sections when they change
+  useEffect(() => {
+    if (!userId || !hydrated) return;
+    const snap = JSON.stringify(sections);
+    if (snap === pushedSections.current) return;
+    const t = setTimeout(() => {
+      pushSections(userId, sections)
+        .then(() => { pushedSections.current = snap; })
+        .catch(() => setSyncState("offline"));
+    }, 600);
+    return () => clearTimeout(t);
+  }, [userId, hydrated, retryTick, sections]);
+
+  // 4) Flush deletions (kept in localStorage so they survive being offline)
+  useEffect(() => {
+    if (!userId || !hydrated || pendingDeletes.length === 0) return;
+    const ids = pendingDeletes.slice();
+    deleteNotes(userId, ids)
+      .then(() => setPendingDeletes((p) => p.filter((x) => !ids.includes(x))))
+      .catch(() => setSyncState("offline"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, hydrated, retryTick, pendingDeletes]);
+
+  // 5) Remove photos that were taken out of a note
+  useEffect(() => {
+    if (!userId || !hydrated || pendingImgDeletes.length === 0) return;
+    const paths = pendingImgDeletes.slice();
+    removeImages(paths)
+      .then(() => setPendingImgDeletes((p) => p.filter((x) => !paths.includes(x))))
+      .catch(() => setSyncState("offline"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, hydrated, retryTick, pendingImgDeletes]);
+
+  const syncLabel =
+    !userId ? "Not signed in · saved on this device"
+      : syncState === "synced" ? "Synced to your account"
+      : syncState === "syncing" ? "Syncing…"
+      : syncState === "offline" ? "Offline · will sync when you reconnect"
+      : "Connecting…";
+  // ================================================
 
   // keep theme in sync with the Session page
   useEffect(() => {
@@ -644,7 +1257,7 @@ export default function Notepad({ onBack, onSaveNote, onDeleteNote } = {}) {
   };
 
   // ---------- editor open / close ----------
-  const snapshot = (d) => JSON.stringify({ t: d.title, s: d.section, c: d.color, p: d.pinned, g: d.tags, b: d.blocks.map((b) => [b.type, b.text, b.checked]) });
+  const snapshot = (d) => JSON.stringify({ t: d.title, s: d.section, c: d.color, p: d.pinned, g: d.tags, i: (d.images || []).map((x) => x.id), b: d.blocks.map((b) => [b.type, b.text, b.checked]) });
   const dirty = !!draft && snapshot(draft) !== draftBase;
 
   const openNew = () => {
@@ -656,6 +1269,7 @@ export default function Notepad({ onBack, onSaveNote, onDeleteNote } = {}) {
       pinned: false,
       tags: [],
       blocks: [newBlock("text")],
+      images: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -667,7 +1281,7 @@ export default function Notepad({ onBack, onSaveNote, onDeleteNote } = {}) {
   const openNote = (id) => {
     const n = notes.find((x) => x.id === id);
     if (!n) return;
-    const d = { ...n, tags: n.tags.slice(), blocks: n.blocks.map((b) => ({ ...b })) };
+    const d = { ...n, tags: n.tags.slice(), blocks: n.blocks.map((b) => ({ ...b })), images: (n.images || []).map((i) => ({ ...i })) };
     setDraft(d);
     setDraftBase(snapshot(d));
     setIsNew(false);
@@ -689,6 +1303,13 @@ export default function Notepad({ onBack, onSaveNote, onDeleteNote } = {}) {
     let blocks = draft.blocks.slice();
     while (blocks.length > 1 && blocks[blocks.length - 1].type === "text" && !blocks[blocks.length - 1].text.trim()) blocks.pop();
     const note = { ...draft, title: draft.title.trim(), blocks, updatedAt: Date.now() };
+    // photos removed from an existing note get deleted from storage on the next sync
+    const orig = notes.find((x) => x.id === note.id);
+    if (orig) {
+      const keep = new Set((note.images || []).map((i) => i.id));
+      const gone = (orig.images || []).filter((i) => i.path && !keep.has(i.id)).map((i) => i.path);
+      if (gone.length) setPendingImgDeletes((p) => [...p, ...gone.filter((x) => !p.includes(x))]);
+    }
     setNotes((ns) => {
       const idx = ns.findIndex((x) => x.id === note.id);
       if (idx > -1) {
@@ -707,20 +1328,27 @@ export default function Notepad({ onBack, onSaveNote, onDeleteNote } = {}) {
   const deleteDraft = () => {
     if (!draft) return;
     if (!window.confirm("Delete this note? This can't be undone.")) return;
-    setNotes((ns) => ns.filter((x) => x.id !== draft.id));
-    remove(draft.id);
+    const delId = draft.id;
+    setNotes((ns) => ns.filter((x) => x.id !== delId));
+    setPendingDeletes((p) => (p.includes(delId) ? p : [...p, delId]));
+    delete pushedNotes.current[delId];
+    remove(delId);
     setDraft(null);
     showToast("Note deleted.");
   };
 
-  // Esc closes editor
+  // Esc: closes the photo viewer first, then the editor
   useEffect(() => {
-    if (!draft) return;
-    const onKey = (e) => { if (e.key === "Escape") closeEditor(); };
+    if (!draft && !lightbox) return;
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      if (lightbox) setLightbox(null);
+      else closeEditor();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft, dirty]);
+  }, [draft, dirty, lightbox]);
 
   // lock page scroll while the editor is open
   useEffect(() => {
@@ -753,14 +1381,13 @@ export default function Notepad({ onBack, onSaveNote, onDeleteNote } = {}) {
   };
 
   // ---------- sections ----------
-  const addSection = () => {
-    const name = sectionInput.trim().slice(0, 24);
-    if (name && !sections.some((s) => s.toLowerCase() === name.toLowerCase())) {
-      setSections((s) => [...s, name]);
-      setActiveSection(name);
-    }
-    setSectionInput("");
-    setAddingSection(false);
+  const addSectionByName = (raw) => {
+    const name = (raw || "").trim().slice(0, 24);
+    if (!name) return null;
+    const existing = allSections.find((s) => s.toLowerCase() === name.toLowerCase());
+    if (existing) return existing;
+    setSections((s) => [...s, name]);
+    return name;
   };
 
   const sectionCounts = useMemo(() => {
@@ -818,59 +1445,29 @@ export default function Notepad({ onBack, onSaveNote, onDeleteNote } = {}) {
               <button type="button" className="np-pill" onClick={() => setTheme(theme === "light" ? "dark" : "light")}>
                 {theme === "light" ? "Switch to dark" : "Switch to light"}
               </button>
+              <span className="np-sync">{syncLabel}</span>
             </div>
           </div>
         </header>
 
         <div className="np-layout">
-          {/* sections rail */}
-          <aside className="np-rail" aria-label="Sections">
-            <div className="np-rail-title">Notebook</div>
-            <div className="np-sections">
-              <button
-                type="button"
-                className={`np-sec${activeSection === "All" ? " active" : ""}`}
-                onClick={() => setActiveSection("All")}
-              >
-                <span className="np-sec-name">All notes</span>
-                <span className="np-sec-count">{notes.length}</span>
-              </button>
-              {allSections.map((s) => (
-                <button
-                  type="button"
-                  key={s}
-                  className={`np-sec${activeSection === s ? " active" : ""}`}
-                  onClick={() => setActiveSection(s)}
-                >
-                  <span className="np-sec-name">{s}</span>
-                  <span className="np-sec-count">{sectionCounts[s] || 0}</span>
-                </button>
-              ))}
-              {addingSection ? (
-                <input
-                  className="np-sec-input"
-                  autoFocus
-                  placeholder="Section name"
-                  value={sectionInput}
-                  maxLength={24}
-                  onChange={(e) => setSectionInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") addSection();
-                    if (e.key === "Escape") { setSectionInput(""); setAddingSection(false); }
-                  }}
-                  onBlur={addSection}
-                />
-              ) : (
-                <button type="button" className="np-sec np-sec-add" onClick={() => setAddingSection(true)}>
-                  + Section
-                </button>
-              )}
-            </div>
-          </aside>
-
           {/* notes list */}
           <main className="np-main">
             <div className="np-toolrow">
+              <SectionMenu
+                variant="filter"
+                label="Section"
+                showAll
+                value={activeSection}
+                options={allSections}
+                counts={sectionCounts}
+                total={notes.length}
+                onChange={setActiveSection}
+                onCreate={(n) => {
+                  const s = addSectionByName(n);
+                  if (s) setActiveSection(s);
+                }}
+              />
               <div className="np-search np-glass">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" />
@@ -951,12 +1548,25 @@ export default function Notepad({ onBack, onSaveNote, onDeleteNote } = {}) {
           draft={draft}
           setDraft={setDraft}
           sections={allSections.includes(draft.section) ? allSections : [...allSections, draft.section]}
+          counts={sectionCounts}
           isNew={isNew}
           dirty={dirty}
           onSave={saveDraft}
           onCancel={closeEditor}
           onDelete={deleteDraft}
+          onCreateSection={addSectionByName}
+          onToast={showToast}
+          onOpenImage={setLightbox}
         />
+      )}
+
+      {lightbox && (
+        <div className="np-lightbox" onClick={() => setLightbox(null)}>
+          <button type="button" className="np-lightbox-close" aria-label="Close photo" onClick={() => setLightbox(null)}>
+            ×
+          </button>
+          <NoteImage img={lightbox} className="np-lightbox-img" />
+        </div>
       )}
 
       <div className={`np-toast${toast ? " show" : ""}`} role="status" aria-live="polite">{toast}</div>
@@ -1064,48 +1674,56 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .np-brand-btns{display:flex;flex-wrap:wrap;gap:8px;}
 .np-pill{background:var(--surface-2);border:1px solid var(--border);color:var(--muted);border-radius:var(--r-pill);padding:6px 13px;font-size:11.5px;font-weight:600;cursor:pointer;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);transition:all .18s ease;}
 .np-pill:hover{border-color:var(--amber);color:var(--text);}
+.np-sync{display:inline-flex;align-items:center;font-size:11.5px;font-weight:600;color:var(--muted);padding:0 4px;}
 
 /* ---------- layout ---------- */
 .np-layout{display:block;}
-@media (min-width:900px){
-  .np-layout{display:grid;grid-template-columns:220px 1fr;gap:26px;align-items:start;}
-  .np-rail{position:sticky;top:24px;}
-}
 
-/* ---------- section rail ---------- */
-.np-rail-title{display:none;font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 6px 10px;}
-.np-sections{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 10px;margin:0 -18px 6px;padding-left:18px;padding-right:18px;scrollbar-width:none;}
-.np-sections::-webkit-scrollbar{display:none;}
-.np-sec{flex-shrink:0;display:inline-flex;align-items:center;gap:8px;padding:8px 13px;border-radius:var(--r-pill);border:1px solid var(--border);background:var(--surface-2);color:var(--muted);font-size:12.5px;font-weight:700;cursor:pointer;transition:all .18s ease;white-space:nowrap;}
-.np-sec:hover{color:var(--text);}
-.np-sec.active{background:var(--btn);border-color:transparent;color:var(--on-accent);box-shadow:0 8px 18px -10px var(--glow-amber);}
-.np-sec-count{font-size:11px;font-weight:800;opacity:.7;font-variant-numeric:tabular-nums;}
-.np-sec-add{border-style:dashed;}
-.np-sec-input{flex-shrink:0;width:140px;background:var(--surface-2);border:1px solid var(--amber);border-radius:var(--r-pill);color:var(--text);padding:8px 13px;font-size:12.5px;}
-@media (min-width:900px){
-  .np-rail{border-radius:var(--r-card);padding:16px 12px;background:var(--surface);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--border);box-shadow:var(--shadow-card);}
-  .np-rail-title{display:block;}
-  .np-sections{flex-direction:column;overflow:visible;margin:0;padding:0;gap:4px;}
-  .np-sec{width:100%;justify-content:space-between;border-radius:14px;border-color:transparent;background:transparent;padding:10px 12px;font-size:13.5px;}
-  .np-sec:hover{background:var(--surface-2);}
-  .np-sec.active{background:var(--btn);}
-  .np-sec-input{width:100%;border-radius:14px;}
-  .np-sec-add{justify-content:center;margin-top:6px;border:1px dashed var(--border);}
-}
+/* ---------- section dropdown ---------- */
+@keyframes np-dd-in{from{opacity:0;transform:translateY(-6px) scale(.98);}to{opacity:1;transform:none;}}
+.np-dd{position:relative;min-width:0;}
+.np-dd-trigger{width:100%;display:flex;align-items:center;gap:12px;text-align:left;cursor:pointer;color:var(--text);background:var(--surface);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--border);border-radius:18px;padding:9px 14px 9px 10px;box-shadow:var(--shadow-card);transition:border-color .18s ease,box-shadow .18s ease;}
+.np-dd-trigger:hover,.np-dd.open .np-dd-trigger{border-color:var(--amber);}
+.np-dd.open .np-dd-trigger{box-shadow:0 0 0 3px var(--amber-dim),var(--shadow-card);}
+.np-dd-ico{flex-shrink:0;width:34px;height:34px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--btn);color:var(--on-accent);}
+.np-dd-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+.np-dd-label{font-size:9.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);}
+.np-dd-value{font-size:14.5px;font-weight:800;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.np-dd-count{flex-shrink:0;font-size:11px;font-weight:800;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-pill);padding:3px 9px;font-variant-numeric:tabular-nums;}
+.np-dd-chev{flex-shrink:0;color:var(--muted);transition:transform .2s ease;}
+.np-dd.open .np-dd-chev{transform:rotate(180deg);}
+.np-dd-menu{position:absolute;z-index:40;left:0;right:0;top:calc(100% + 8px);min-width:230px;max-height:320px;overflow-y:auto;padding:8px;border-radius:20px;background:var(--sheet-bg);border:1px solid var(--border);box-shadow:0 1px 0 rgba(255,255,255,.08) inset,0 28px 54px -18px rgba(0,0,0,.75);animation:np-dd-in .16s ease;}
+.np-dd-opt{width:100%;display:flex;align-items:center;gap:10px;background:none;border:none;color:var(--text);padding:10px 12px;border-radius:13px;font-size:13.5px;font-weight:600;cursor:pointer;text-align:left;}
+.np-dd-opt:hover,.np-dd-opt:focus-visible{background:var(--surface-2);outline:none;}
+.np-dd-opt.sel{background:var(--amber-dim);font-weight:800;}
+.np-dd-opt .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.np-dd-opt .ct{font-size:11px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums;}
+.np-dd-opt .ck{width:14px;text-align:center;color:var(--accent-text);font-weight:800;font-size:13px;}
+.np-dd-sep{height:1px;background:var(--border);margin:6px 4px;}
+.np-dd-new{width:100%;text-align:left;background:none;border:none;color:var(--accent-text);padding:10px 12px;border-radius:13px;font-size:13px;font-weight:800;cursor:pointer;}
+.np-dd-new:hover{background:var(--surface-2);}
+.np-dd-input{width:100%;background:var(--surface-2);border:1px solid var(--amber);border-radius:13px;color:var(--text);padding:10px 12px;font-size:13px;outline:none;}
 
-/* ---------- toolbar row ---------- */
-.np-toolrow{display:flex;gap:10px;margin-bottom:6px;}
-.np-search{flex:1;min-width:0;display:flex;align-items:center;gap:10px;border-radius:18px;padding:0 14px;color:var(--muted);}
-.np-search input{flex:1;min-width:0;background:none;border:none;color:var(--text);font-size:14px;padding:13px 0;outline:none;}
-.np-search input::placeholder{color:var(--muted);}
-.np-search:focus-within{border-color:var(--amber);}
-.np-clear{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:0 2px;}
-.np-clear:hover{color:var(--text);}
-.np-sort{flex-shrink:0;background:var(--surface-2);border:1px solid var(--border);border-radius:18px;color:var(--text);padding:0 12px;font-size:12.5px;font-weight:600;cursor:pointer;max-width:140px;}
+/* compact variant used inside the editor */
+.np-dd-field{display:inline-block;}
+.np-dd-field .np-dd-trigger{width:auto;padding:6px 10px 6px 8px;gap:9px;border-radius:14px;box-shadow:none;background:var(--surface-2);}
+.np-dd-field .np-dd-ico{width:26px;height:26px;border-radius:9px;}
+.np-dd-field .np-dd-label{display:none;}
+.np-dd-field .np-dd-value{font-size:13px;max-width:130px;}
+.np-dd-field .np-dd-menu{right:auto;width:250px;}
 
-.np-h2{font-weight:700;font-size:19px;letter-spacing:-.02em;margin:26px 0 14px;padding:0 4px;display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
-.np-sub{font-weight:500;font-size:11.5px;color:var(--muted);letter-spacing:0;text-align:right;}
-.np-group{font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:18px 6px 10px;}
+.np-toolbar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface-2);}
+.np-toolbar-scroll{flex:1;min-width:0;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;}
+.np-toolbar-scroll::-webkit-scrollbar{display:none;}
+.np-photo-wrap{position:relative;flex-shrink:0;padding-left:8px;border-left:1px solid var(--border);}
+.np-photo-menu{position:absolute;right:0;top:calc(100% + 12px);z-index:30;min-width:250px;padding:8px;border-radius:18px;background:var(--sheet-bg);border:1px solid var(--border);box-shadow:0 28px 54px -18px rgba(0,0,0,.75);animation:np-dd-in .16s ease;}
+.np-photo-menu button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;background:none;border:none;color:var(--text);padding:11px 12px;border-radius:13px;font-size:13.5px;font-weight:700;cursor:pointer;}
+.np-photo-menu button:hover{background:var(--surface-2);}
+.np-photo-menu small{font-size:11.5px;color:var(--muted);font-weight:500;}
+
+.np-toolrow{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:6px;}
+.np-dd-filter{flex:1 1 100%;}
+@media (min-width:760px){.np-dd-filter{flex:0 0 260px;}}
 
 /* ---------- note cards ---------- */
 .np-grid{display:grid;grid-template-columns:1fr;gap:12px;}
@@ -1191,8 +1809,14 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .np-tag-input:focus{border-color:var(--amber);}
 
 /* formatting toolbar */
-.np-toolbar{display:flex;gap:6px;overflow-x:auto;padding:10px 16px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface-2);scrollbar-width:none;}
-.np-toolbar::-webkit-scrollbar{display:none;}
+.np-toolbar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface-2);}
+.np-toolbar-scroll{flex:1;min-width:0;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;}
+.np-toolbar-scroll::-webkit-scrollbar{display:none;}
+.np-photo-wrap{position:relative;flex-shrink:0;padding-left:8px;border-left:1px solid var(--border);}
+.np-photo-menu{position:absolute;right:0;top:calc(100% + 12px);z-index:30;min-width:250px;padding:8px;border-radius:18px;background:var(--sheet-bg);border:1px solid var(--border);box-shadow:0 28px 54px -18px rgba(0,0,0,.75);animation:np-dd-in .16s ease;}
+.np-photo-menu button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;background:none;border:none;color:var(--text);padding:11px 12px;border-radius:13px;font-size:13.5px;font-weight:700;cursor:pointer;}
+.np-photo-menu button:hover{background:var(--surface-2);}
+.np-photo-menu small{font-size:11.5px;color:var(--muted);font-weight:500;}
 .np-tool{flex-shrink:0;display:inline-flex;align-items:center;gap:7px;border:1px solid transparent;background:none;color:var(--muted);border-radius:12px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s ease;white-space:nowrap;}
 .np-tool:hover{color:var(--text);background:var(--surface-2);}
 .np-tool.on{background:var(--btn);color:var(--on-accent);box-shadow:0 6px 14px -8px var(--glow-amber);}
@@ -1236,4 +1860,42 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
   .np-fab,.np-backdrop,.np-sheet{animation:none;}
   .np-card,.np-fab{transition:none;}
 }
+
+
+/* ---------- photos ---------- */
+.np-img-ph{background:linear-gradient(90deg,var(--surface-2),var(--amber-dim),var(--surface-2));background-size:200% 100%;animation:np-shimmer 1.4s linear infinite;}
+@keyframes np-shimmer{from{background-position:200% 0;}to{background-position:-200% 0;}}
+.np-photos{margin-top:18px;padding-top:14px;border-top:1px solid var(--border);}
+.np-photos-head{display:flex;justify-content:space-between;font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+.np-photos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;}
+.np-photo{position:relative;aspect-ratio:1;border-radius:16px;overflow:hidden;border:1px solid var(--border);background:var(--surface-2);}
+.np-photo-img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in;border-radius:0;}
+.np-photo-x{position:absolute;top:6px;right:6px;width:26px;height:26px;border-radius:50%;border:none;background:rgba(0,0,0,.62);color:#fff;font-size:16px;line-height:1;cursor:pointer;}
+.np-photo-x:hover{background:var(--rose);}
+
+.np-card-cover{position:relative;margin:0 0 12px;border-radius:14px;overflow:hidden;aspect-ratio:16/9;background:var(--surface-2);}
+.np-card-cover-img{width:100%;height:100%;object-fit:cover;display:block;border-radius:0;}
+.np-card-cover-n{position:absolute;right:8px;bottom:8px;font-size:11px;font-weight:800;color:#fff;background:rgba(0,0,0,.6);border-radius:var(--r-pill);padding:3px 9px;}
+
+/* camera */
+.np-cam{position:fixed;inset:0;z-index:160;background:#000;display:flex;flex-direction:column;}
+.np-cam-stage{position:relative;flex:1;min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center;}
+.np-cam-video{width:100%;height:100%;object-fit:cover;background:#000;}
+.np-cam-video.mirror{transform:scaleX(-1);}
+.np-cam-msg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:28px;text-align:center;color:#e9edf8;font-size:14px;line-height:1.5;}
+.np-cam-msg p{margin:0;max-width:320px;}
+.np-cam-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .18s ease;}
+.np-cam-flash.on{opacity:.85;transition:none;}
+.np-cam-bar{display:flex;align-items:center;justify-content:space-between;padding:18px 26px calc(22px + env(safe-area-inset-bottom,0px));background:#05070e;}
+.np-cam-side{min-width:76px;background:none;border:none;color:#e9edf8;font-size:14px;font-weight:700;cursor:pointer;padding:10px 4px;}
+.np-cam-side:disabled{opacity:.35;}
+.np-cam-shutter{width:76px;height:76px;border-radius:50%;border:4px solid #fff;background:none;padding:5px;cursor:pointer;}
+.np-cam-shutter span{display:block;width:100%;height:100%;border-radius:50%;background:#fff;transition:transform .12s ease;}
+.np-cam-shutter:active span{transform:scale(.88);}
+.np-cam-shutter:disabled{opacity:.35;}
+
+/* photo viewer */
+.np-lightbox{position:fixed;inset:0;z-index:170;background:rgba(2,6,18,.9);display:flex;align-items:center;justify-content:center;padding:20px;animation:np-fade .2s ease;}
+.np-lightbox-img{max-width:100%;max-height:88vh;border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.6);}
+.np-lightbox-x,.np-lightbox-close{position:absolute;top:calc(16px + env(safe-area-inset-top,0px));right:18px;width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.12);color:#fff;font-size:22px;line-height:1;cursor:pointer;}
 `;
