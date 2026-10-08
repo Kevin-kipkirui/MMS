@@ -2736,4 +2736,24 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .ts-root .wrap{padding-top:62px;}
 .ts-root [id^="ts-"]{scroll-margin-top:52px;}
 
+/* ---------- light theme: make the ticker readable (navy bar, bright text) ---------- */
+.ts-root[data-theme="light"] .ts-ticker{
+background:linear-gradient(180deg,rgba(18,44,96,.96),rgba(12,32,74,.96));
+border-bottom:1px solid rgba(255,255,255,.14);
+box-shadow:0 10px 24px -14px rgba(10,30,80,.7);
+}
+.ts-root[data-theme="light"] .ts-tk-item{color:#f4f7ff;}
+.ts-root[data-theme="light"] .ts-tk-time{color:#f6e0a2;}
+.ts-root[data-theme="light"] .ts-tk-rule{color:#b9cbec;}
+.ts-root[data-theme="light"] .ts-tk-label{color:#b9cbec;}
+.ts-root[data-theme="light"] .ts-tk-val.pos{color:#6dffb8;}
+.ts-root[data-theme="light"] .ts-tk-val.neg{color:#ff9a8f;}
+.ts-root[data-theme="light"] .ts-tk-sep{color:#f6e0a2;opacity:.8;}
+.ts-root[data-theme="light"] .ts-tk-item.past{opacity:.5;}
+
+/* brighter impact dots on the navy bar */
+.ts-root[data-theme="light"] .ts-ticker .impact.high{background:#ff6b7d;box-shadow:0 0 0 3px rgba(255,107,125,.28);}
+.ts-root[data-theme="light"] .ts-ticker .impact.med{background:#ffc15a;box-shadow:0 0 0 3px rgba(255,193,90,.28);}
+.ts-root[data-theme="light"] .ts-ticker .impact.low{background:#4de8a8;box-shadow:0 0 0 3px rgba(77,232,168,.26);}
+
 `;
