@@ -1717,6 +1717,7 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
               onNotepad={handleGoToNotepad}
               onLogout={handleLogout}
             />
+            <div className="spacer-slot" aria-hidden="true" />
           </div>
           <div className="clockbox">
             <div className="time">{pad(now.getHours())}:{pad(now.getMinutes())}</div>
@@ -2941,6 +2942,35 @@ box-shadow:0 10px 24px -14px rgba(10,30,80,.7);
 @media (prefers-reduced-motion:reduce){
 .ts-root .ts-menu-panel{animation:none;}
 .ts-root .ts-menu-btn i,.ts-root .ts-mini::after{transition:none;}
+}
+
+/* ---------- always-floating menu ---------- */
+.ts-root .ts-menu-slot{flex-shrink:0;width:44px;height:44px;}
+
+.ts-root .ts-menu{
+position:fixed;
+z-index:65;
+/* sits just under the 36px ticker */
+top:calc(env(safe-area-inset-top,0px) + 46px);
+/* lines up with the page content's left edge */
+left:max(18px,calc(50% - 242px));
+}
+@media (min-width:900px){
+.ts-root .ts-menu{left:max(18px,calc(50% - 262px));}
+}
+
+/* solid enough to read over scrolling content */
+.ts-root .ts-menu-btn{
+background:var(--menu-bg);
+box-shadow:0 10px 24px -10px rgba(0,0,0,.55);
+}
+.ts-root .ts-menu.open .ts-menu-btn{background:var(--menu-bg);}
+
+/* tall menus scroll instead of running off short screens */
+.ts-root .ts-menu-panel{
+max-height:calc(100dvh - env(safe-area-inset-top,0px) - 130px);
+overflow-y:auto;
+overscroll-behavior:contain;
 }
 
 `;
