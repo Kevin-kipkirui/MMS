@@ -1707,7 +1707,11 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
       <div className="wrap">
         <header className="top" id="ts-top">
           <div className="brand">
-            <h1>The Session</h1>
+            <div className="brand-row">
+              <div className="ts-menu-slot" aria-hidden="true" />
+              <h1>The Session</h1>
+              <div className="ts-menu-slot" aria-hidden="true" />
+            </div>
             <HeaderMenu
               theme={theme}
               onToggleTheme={() => setTheme(theme === "light" ? "dark" : "light")}
@@ -1717,7 +1721,6 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
               onNotepad={handleGoToNotepad}
               onLogout={handleLogout}
             />
-            <div className="spacer-slot" aria-hidden="true" />
           </div>
           <div className="clockbox">
             <div className="time">{pad(now.getHours())}:{pad(now.getMinutes())}</div>
@@ -2991,5 +2994,10 @@ max-height:calc(100dvh - env(safe-area-inset-top,0px) - 130px);
 overflow-y:auto;
 overscroll-behavior:contain;
 }
+
+.ts-root .ts-menu-hamburger span{transition:transform .25s ease,opacity .18s ease;}
+.ts-root .ts-menu.open .ts-menu-hamburger span:nth-child(1){transform:translateY(6px) rotate(45deg);}
+.ts-root .ts-menu.open .ts-menu-hamburger span:nth-child(2){opacity:0;transform:scaleX(.2);}
+.ts-root .ts-menu.open .ts-menu-hamburger span:nth-child(3){transform:translateY(-6px) rotate(-45deg);}
 
 `;
