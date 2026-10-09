@@ -2944,18 +2944,24 @@ box-shadow:0 10px 24px -14px rgba(10,30,80,.7);
 .ts-root .ts-menu-btn i,.ts-root .ts-mini::after{transition:none;}
 }
 
-/* ---------- centered title ---------- */
-.ts-root header.top{flex-wrap:wrap;}
-.ts-root .brand{flex:1 1 100%;}
+/* ---------- header: [menu slot] [ title centered ] [ clock block ] ---------- */
+.ts-root header.top{display:flex;flex-wrap:nowrap;align-items:center;justify-content:space-between;gap:10px;}
 
-/* left: menu slot | middle: title | right: empty twin so the title is truly centered */
-.ts-root .brand-row{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;gap:8px;}
-.ts-root .brand-row::after{content:"";}
-.ts-root .brand .brand-row h1{width:auto;margin:0;text-align:center;}
+.ts-root .brand{flex:1 1 auto;min-width:0;}
+.ts-root .brand-row{display:flex;align-items:center;gap:8px;width:100%;}
+.ts-root .brand-row::after{content:none;}
 
-/* clock block moves under the title, centered to match */
-.ts-root .clockbox{flex:1 1 100%;text-align:center;margin-top:6px;}
-.ts-root .clockbox .followrow{justify-content:center;}
+/* title takes all the space between the hamburger slot and the clock, centered in it */
+.ts-root .brand .brand-row h1{flex:1;min-width:0;width:auto;margin:0;text-align:center;white-space:nowrap;}
+
+/* clock block stays on the right, exactly as before */
+.ts-root .clockbox{flex:0 0 auto;text-align:right;margin-top:0;}
+.ts-root .clockbox .followrow{justify-content:flex-end;}
+
+@media (max-width:420px){
+.ts-root .brand .brand-row h1{font-size:clamp(20px,6.2vw,26px);}
+.ts-root .clockbox .time{font-size:22px;}
+}
 
 /* ---------- always-floating menu ---------- */
 .ts-root .ts-menu-slot{flex-shrink:0;width:44px;height:44px;}
