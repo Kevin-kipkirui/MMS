@@ -603,6 +603,30 @@ function EditLimitModal({ mode, maxLoss, currency, tradeLimit, dailyTarget, onCl
   );
 }
 
+// Sliding light/dark switch
+function ThemeSwitch({ theme, onToggle }) {
+  const dark = theme !== "light";
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={dark}
+      aria-label="Dark mode"
+      title={dark ? "Switch to light" : "Switch to dark"}
+      className={`ts-switch${dark ? " is-dark" : ""}`}
+      onClick={onToggle}
+    >
+      <span className="ts-switch-track" aria-hidden="true">
+        <span className="ts-switch-icon ts-switch-sun">☀</span>
+        <span className="ts-switch-icon ts-switch-moon">☾</span>
+        <span className={`ts-switch-knob${dark ? " is-dark" : ""}`}>
+          {dark ? "☾" : "☀"}
+        </span>
+      </span>
+    </button>
+  );
+}
+
 // ---------- floating hologram clock ----------
 const SEG_POLY = {
   a: "2,1 18,1 15.5,4.5 4.5,4.5",
@@ -1582,9 +1606,7 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
         <header className="top" id="ts-top">
           <div className="brand">
             <h1>The Session</h1>
-            <button className="theme-toggle" onClick={() => setTheme(theme === "light" ? "dark" : "light")}>
-              {theme === "light" ? "Switch to dark" : "Switch to light"}
-            </button>
+            <ThemeSwitch theme={theme} onToggle={() => setTheme(theme === "light" ? "dark" : "light")} />
             <button className="theme-toggle lg-logout-btn" onClick={handleLogout}>
               Log out
             </button>
@@ -2313,6 +2335,13 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .ts-root .brand h1{width:100%;font-weight:800;font-size:clamp(26px,6vw,32px);margin:0 0 8px;letter-spacing:-.03em;line-height:1.05;}
 .ts-root .theme-toggle{margin:0;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);border-radius:var(--r-pill);padding:6px 12px;font-size:11.5px;font-weight:600;cursor:pointer;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);transition:all .18s ease;}
 .ts-root .theme-toggle:hover{border-color:var(--amber);color:var(--text);}
+.ts-root .ts-switch{border:0;background:transparent;padding:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}
+.ts-root .ts-switch-track{position:relative;display:flex;align-items:center;justify-content:space-between;width:64px;height:32px;padding:0 10px;border-radius:999px;background:linear-gradient(135deg, rgba(255,255,255,.28), rgba(255,255,255,.08));border:1px solid var(--border);box-shadow:inset 0 1px 0 rgba(255,255,255,.15), var(--shadow-card);}
+.ts-root .ts-switch-icon{font-size:11px;line-height:1;opacity:.68;display:inline-flex;align-items:center;justify-content:center;width:12px;height:12px;}
+.ts-root .ts-switch-sun{color:#f9c74f;}
+.ts-root .ts-switch-moon{color:#9cc7ff;}
+.ts-root .ts-switch-knob{position:absolute;top:3px;left:4px;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg, rgba(255,255,255,.98), rgba(225,234,255,.9));color:#f59e0b;border:1px solid rgba(255,255,255,.7);box-shadow:0 6px 18px rgba(15,23,42,.18);transition:all .2s ease;}
+.ts-root .ts-switch-knob.is-dark{left:36px;background:linear-gradient(180deg, rgba(26,34,52,.95), rgba(18,22,33,.92));color:#dbeafe;border-color:rgba(148,163,184,.3);}
 .ts-root .lg-logout-btn{margin-left:0;}
 .ts-root .ts-summit-btn{background:var(--btn);color:var(--on-accent);border-color:transparent;font-weight:800;}
 .ts-root .ts-perf-btn{background:var(--surface-2);color:var(--text);font-weight:800;}

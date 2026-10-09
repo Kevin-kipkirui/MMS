@@ -238,6 +238,14 @@ font-size:var(--fs-sm); line-height:1.5; -webkit-font-smoothing:antialiased; ove
 .np-toast{display:flex;align-items:center;gap:14px;}
 .np-toast.show{pointer-events:auto;}
 .np-toast button{background:none;border:0;color:var(--accent-text);font-weight:600;padding:0;}
+.np-switch{position:relative;flex-shrink:0;width:58px;height:32px;padding:0;border-radius:var(--r-pill);border:1px solid var(--border);background:var(--surface-2);}
+.np-switch:hover{border-color:var(--amber);}
+.np-switch .ico{position:absolute;top:50%;transform:translateY(-50%);color:var(--muted);opacity:.7;}
+.np-switch .ico.l{left:8px;}
+.np-switch .ico.r{right:8px;}
+.np-switch .knob{position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--btn);color:var(--on-accent);box-shadow:0 4px 10px -2px rgba(0,0,0,.4);transition:transform .28s cubic-bezier(.3,1.3,.5,1);}
+.np-switch[aria-checked="true"] .knob{transform:translateX(26px);}
+@media (prefers-reduced-motion:reduce){.np-switch .knob{transition:none;}}
 /* iOS zooms into inputs under 16px */
 @media (pointer:coarse){
   .np-block textarea,.np-title-input,.np-search input,.np-select,.np-tag-input,.np-nav-input{font-size:16px;}

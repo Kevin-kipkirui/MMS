@@ -138,8 +138,10 @@ export default function Sidebar({
           <button type="button" className="np-btn" onClick={onExit}>
             <ChevronLeft size={16} /> Session
           </button>
-          <button type="button" className="np-icon-btn" onClick={onToggleTheme} aria-label="Toggle theme">
-            {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
+          <button type="button" role="switch" aria-checked={theme !== "light"} aria-label="Dark mode" className="np-switch" onClick={onToggleTheme}>
+            <span className="ico l"><Sun size={12} /></span>
+            <span className="ico r"><Moon size={12} /></span>
+            <span className="knob">{theme === "light" ? <Moon size={12} /> : <Sun size={12} />}</span>
           </button>
         </div>
       </div>
