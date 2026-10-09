@@ -603,27 +603,129 @@ function EditLimitModal({ mode, maxLoss, currency, tradeLimit, dailyTarget, onCl
   );
 }
 
-// Sliding light/dark switch
-function ThemeSwitch({ theme, onToggle }) {
-  const dark = theme !== "light";
+// ---------- header menu (hamburger) ----------
+const MENU_ICONS = {
+  summit: ["M8 3 12 11 17 6 22 21H2L8 3z"],
+  perf: ["M22 7 13.5 15.5 8.5 10.5 2 17", "M16 7h6v6"],
+  news: ["M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2", "M18 14h-8", "M15 18h-5", "M10 6h8v4h-8z"],
+  notes: ["M12 20h9", "M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"],
+  sun: ["M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z", "M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"],
+  moon: ["M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"],
+  logout: ["M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4", "m16 17 5-5-5-5", "M21 12H9"],
+};
+
+function MIcon({ name }) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={dark}
-      aria-label="Dark mode"
-      title={dark ? "Switch to light" : "Switch to dark"}
-      className={`ts-switch${dark ? " is-dark" : ""}`}
-      onClick={onToggle}
-    >
-      <span className="ts-switch-track" aria-hidden="true">
-        <span className="ts-switch-icon ts-switch-sun">☀</span>
-        <span className="ts-switch-icon ts-switch-moon">☾</span>
-        <span className={`ts-switch-knob${dark ? " is-dark" : ""}`}>
-          {dark ? "☾" : "☀"}
-        </span>
-      </span>
+    <svg viewBox="0 0 24 24" className="ts-menu-svg" aria-hidden="true" focusable="false">
+      {MENU_ICONS[name].map((d, i) => (
+        <path key={i} d={d} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      ))}
+    </svg>
+  );
+}
+
+function HeaderMenu({ theme, onToggleTheme, onSummit, onPerformance, onNews, onNotepad, onLogout }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  const btnRef = useRef(null);
+  const dark = theme !== "light";
+
+  const close = useCallback((refocus) => {
+    setOpen(false);
+    if (refocus && btnRef.current) btnRef.current.focus();
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") close(true);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, close]);
+
+  useEffect(() => {
+    if (!open || !wrapRef.current) return;
+    const first = wrapRef.current.querySelector('[role^="menuitem"]');
+    if (first) first.focus();
+  }, [open]);
+
+  const onMenuKey = (e) => {
+    const keys = ["ArrowDown", "ArrowUp", "Home", "End"];
+    if (!keys.includes(e.key)) return;
+    const items = Array.from(wrapRef.current.querySelectorAll('[role^="menuitem"]'));
+    const i = items.indexOf(document.activeElement);
+    e.preventDefault();
+    let n = i;
+    if (e.key === "ArrowDown") n = (i + 1) % items.length;
+    if (e.key === "ArrowUp") n = (i - 1 + items.length) % items.length;
+    if (e.key === "Home") n = 0;
+    if (e.key === "End") n = items.length - 1;
+    items[n].focus();
+  };
+
+  const run = (fn) => () => {
+    setOpen(false);
+    fn();
+  };
+
+  const Item = ({ icon, label, onClick, danger }) => (
+    <button type="button" role="menuitem" className={`ts-menu-item${danger ? " danger" : ""}`} onClick={onClick}>
+      <span className="ts-menu-ico"><MIcon name={icon} /></span>
+      <span className="ts-menu-lbl">{label}</span>
+      {danger ? <span className="ts-menu-val danger">•</span> : null}
     </button>
+  );
+
+  return (
+    <div className={`ts-menu${open ? " open" : ""}`} ref={wrapRef}>
+      <button
+        ref={btnRef}
+        type="button"
+        className="ts-menu-btn"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={open ? "Close menu" : "Open menu"}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span className="ts-menu-hamburger" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </span>
+      </button>
+
+      {open && (
+        <div className="ts-menu-panel" role="menu" aria-label="Main menu" onKeyDown={onMenuKey}>
+          <Item icon="summit" label="Summit" onClick={run(onSummit)} />
+          <Item icon="perf" label="Performance" onClick={run(onPerformance)} />
+          <Item icon="news" label="News" onClick={run(onNews)} />
+          <Item icon="notes" label="Notepad" onClick={run(onNotepad)} />
+
+          <div className="ts-menu-sep" role="separator" />
+
+          <button type="button" role="menuitemcheckbox" aria-checked={dark} className="ts-menu-item" onClick={onToggleTheme}>
+            <span className="ts-menu-ico"><MIcon name={dark ? "moon" : "sun"} /></span>
+            <span className="ts-menu-lbl">Theme</span>
+            <span className="ts-menu-val">{dark ? "Dark" : "Light"}</span>
+            <span className="ts-mini" aria-hidden="true" />
+          </button>
+
+          <div className="ts-menu-sep" role="separator" />
+
+          <Item icon="logout" label="Log out" danger onClick={run(onLogout)} />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1606,22 +1708,15 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
         <header className="top" id="ts-top">
           <div className="brand">
             <h1>The Session</h1>
-            <ThemeSwitch theme={theme} onToggle={() => setTheme(theme === "light" ? "dark" : "light")} />
-            <button className="theme-toggle lg-logout-btn" onClick={handleLogout}>
-              Log out
-            </button>
-            <button className="theme-toggle ts-summit-btn" onClick={handleGoToSummit}>
-              🏔️ Summit
-            </button>
-            <button className="theme-toggle ts-perf-btn" onClick={handleGoToPerformance}>
-              📈 Performance
-            </button>
-            <button className="theme-toggle ts-perf-btn" onClick={handleGoToNews}>
-              📰 News
-            </button>
-            <button className="theme-toggle ts-perf-btn" type="button" onClick={handleGoToNotepad}>
-              📝 Notepad
-            </button>
+            <HeaderMenu
+              theme={theme}
+              onToggleTheme={() => setTheme(theme === "light" ? "dark" : "light")}
+              onSummit={handleGoToSummit}
+              onPerformance={handleGoToPerformance}
+              onNews={handleGoToNews}
+              onNotepad={handleGoToNotepad}
+              onLogout={handleLogout}
+            />
           </div>
           <div className="clockbox">
             <div className="time">{pad(now.getHours())}:{pad(now.getMinutes())}</div>
@@ -2335,16 +2430,23 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .ts-root .brand h1{width:100%;font-weight:800;font-size:clamp(26px,6vw,32px);margin:0 0 8px;letter-spacing:-.03em;line-height:1.05;}
 .ts-root .theme-toggle{margin:0;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);border-radius:var(--r-pill);padding:6px 12px;font-size:11.5px;font-weight:600;cursor:pointer;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);transition:all .18s ease;}
 .ts-root .theme-toggle:hover{border-color:var(--amber);color:var(--text);}
-.ts-root .ts-switch{border:0;background:transparent;padding:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}
-.ts-root .ts-switch-track{position:relative;display:flex;align-items:center;justify-content:space-between;width:64px;height:32px;padding:0 10px;border-radius:999px;background:linear-gradient(135deg, rgba(255,255,255,.28), rgba(255,255,255,.08));border:1px solid var(--border);box-shadow:inset 0 1px 0 rgba(255,255,255,.15), var(--shadow-card);}
-.ts-root .ts-switch-icon{font-size:11px;line-height:1;opacity:.68;display:inline-flex;align-items:center;justify-content:center;width:12px;height:12px;}
-.ts-root .ts-switch-sun{color:#f9c74f;}
-.ts-root .ts-switch-moon{color:#9cc7ff;}
-.ts-root .ts-switch-knob{position:absolute;top:3px;left:4px;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg, rgba(255,255,255,.98), rgba(225,234,255,.9));color:#f59e0b;border:1px solid rgba(255,255,255,.7);box-shadow:0 6px 18px rgba(15,23,42,.18);transition:all .2s ease;}
-.ts-root .ts-switch-knob.is-dark{left:36px;background:linear-gradient(180deg, rgba(26,34,52,.95), rgba(18,22,33,.92));color:#dbeafe;border-color:rgba(148,163,184,.3);}
-.ts-root .lg-logout-btn{margin-left:0;}
-.ts-root .ts-summit-btn{background:var(--btn);color:var(--on-accent);border-color:transparent;font-weight:800;}
-.ts-root .ts-perf-btn{background:var(--surface-2);color:var(--text);font-weight:800;}
+.ts-menu{position:relative;display:inline-flex;align-items:center;}
+.ts-menu-btn{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;border:1px solid var(--border);border-radius:14px;background:var(--surface-2);color:var(--text);box-shadow:var(--shadow-card);cursor:pointer;transition:all .18s ease;}
+.ts-menu-btn:hover{border-color:var(--amber);}
+.ts-menu-hamburger{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:18px;height:14px;}
+.ts-menu-hamburger span{display:block;width:100%;height:2px;border-radius:2px;background:currentColor;}
+.ts-menu-panel{position:absolute;right:0;top:calc(100% + 12px);width:220px;padding:8px;border-radius:18px;border:1px solid var(--border);background:var(--surface);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);box-shadow:var(--shadow-card-hover);z-index:100;}
+.ts-menu-item{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:0;border-radius:12px;background:none;color:var(--text);text-align:left;cursor:pointer;}
+.ts-menu-item:hover{background:var(--surface-2);}
+.ts-menu-item.danger{color:var(--rose);}
+.ts-menu-ico{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;color:currentColor;flex-shrink:0;}
+.ts-menu-svg{display:block;width:16px;height:16px;}
+.ts-menu-lbl{flex:1;min-width:0;font-size:13px;font-weight:600;}
+.ts-menu-val{font-size:11px;color:var(--muted);font-weight:700;}
+.ts-menu-val.danger{font-size:18px;line-height:1;color:currentColor;}
+.ts-mini{width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 0 3px var(--amber-dim);margin-left:4px;}
+.ts-menu-item[aria-checked="true"] .ts-mini{background:var(--teal);box-shadow:0 0 0 3px var(--teal-dim);}
+.ts-menu-sep{height:1px;background:var(--border);margin:8px 0;}
 .ts-root .clockbox{text-align:right;flex-shrink:0;}
 .ts-root .clockbox .time{font-size:26px;font-weight:800;letter-spacing:-.02em;}
 .ts-root .clockbox .date{font-size:12px;color:var(--muted);font-weight:500;}
@@ -2794,5 +2896,51 @@ box-shadow:0 10px 24px -14px rgba(10,30,80,.7);
 .ts-root[data-theme="light"] .ts-ticker .impact.high{background:#ff6b7d;box-shadow:0 0 0 3px rgba(255,107,125,.28);}
 .ts-root[data-theme="light"] .ts-ticker .impact.med{background:#ffc15a;box-shadow:0 0 0 3px rgba(255,193,90,.28);}
 .ts-root[data-theme="light"] .ts-ticker .impact.low{background:#4de8a8;box-shadow:0 0 0 3px rgba(77,232,168,.26);}
+
+/* ---------- header menu ---------- */
+.ts-root{--menu-bg:rgba(12,17,34,.97);--menu-hover:rgba(255,255,255,.06);--menu-sep:rgba(190,205,255,.12);--menu-shadow:0 1px 0 rgba(255,255,255,.08) inset,0 30px 60px -20px rgba(0,0,0,.85);}
+.ts-root[data-theme="light"]{--menu-bg:rgba(246,249,255,.97);--menu-hover:rgba(30,60,120,.07);--menu-sep:rgba(30,60,120,.13);--menu-shadow:0 1px 0 #fff inset,0 28px 50px -18px rgba(38,72,150,.5);}
+
+.ts-root .brand-row{display:flex;align-items:center;gap:12px;width:100%;}
+.ts-root .brand .brand-row h1{width:auto;margin:0;}
+
+/* keep the open panel above the dock and clock (the wrap is its own stacking context) */
+.ts-root .wrap:has(.ts-menu.open){z-index:70;}
+
+.ts-root .ts-menu{position:relative;flex-shrink:0;}
+.ts-root .ts-menu-btn{position:relative;width:44px;height:44px;padding:0;border-radius:50%;border:1px solid var(--border);background:var(--surface-2);color:var(--text);cursor:pointer;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);transition:border-color .18s ease,background .18s ease;}
+.ts-root .ts-menu-btn:hover,.ts-root .ts-menu.open .ts-menu-btn{border-color:var(--amber);}
+.ts-root .ts-menu.open .ts-menu-btn{background:var(--amber-dim);}
+.ts-root .ts-menu-btn i{position:absolute;left:13px;width:16px;height:2px;border-radius:2px;background:currentColor;transition:top .25s ease,transform .25s ease,opacity .18s ease;}
+.ts-root .ts-menu-btn i:nth-child(1){top:14px;}
+.ts-root .ts-menu-btn i:nth-child(2){top:20px;}
+.ts-root .ts-menu-btn i:nth-child(3){top:26px;}
+.ts-root .ts-menu.open .ts-menu-btn i:nth-child(1){top:20px;transform:rotate(45deg);}
+.ts-root .ts-menu.open .ts-menu-btn i:nth-child(2){opacity:0;transform:scaleX(.2);}
+.ts-root .ts-menu.open .ts-menu-btn i:nth-child(3){top:20px;transform:rotate(-45deg);}
+
+.ts-root .ts-menu-panel{position:absolute;left:0;top:calc(100% + 10px);z-index:70;width:min(280px,calc(100vw - 36px));padding:8px;border-radius:24px;background:var(--menu-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--border);box-shadow:var(--menu-shadow);transform-origin:top left;animation:ts-menu-in .18s cubic-bezier(.2,.9,.3,1);}
+@keyframes ts-menu-in{from{opacity:0;transform:translateY(-6px) scale(.97);}to{opacity:1;transform:none;}}
+
+.ts-root .ts-menu-item{position:relative;display:flex;align-items:center;gap:14px;width:100%;padding:12px 14px;border:0;border-radius:16px;background:none;color:var(--text);font-size:14.5px;font-weight:600;text-align:left;cursor:pointer;transition:background .15s ease;}
+.ts-root .ts-menu-item:hover,.ts-root .ts-menu-item:focus-visible{background:var(--menu-hover);outline:none;}
+.ts-root .ts-menu-item::before{content:"";position:absolute;left:-4px;top:50%;width:2px;height:18px;border-radius:2px;background:var(--amber);transform:translateY(-50%) scaleY(0);transition:transform .15s ease;}
+.ts-root .ts-menu-item:hover::before,.ts-root .ts-menu-item:focus-visible::before{transform:translateY(-50%) scaleY(1);}
+.ts-root .ts-menu-ico{display:grid;place-items:center;flex-shrink:0;color:var(--muted);transition:color .15s ease;}
+.ts-root .ts-menu-item:hover .ts-menu-ico,.ts-root .ts-menu-item:focus-visible .ts-menu-ico{color:var(--accent-text);}
+.ts-root .ts-menu-lbl{flex:1;min-width:0;}
+.ts-root .ts-menu-val{font-size:12px;font-weight:600;color:var(--muted);}
+.ts-root .ts-menu-sep{height:1px;margin:6px 10px;background:var(--menu-sep);}
+.ts-root .ts-menu-item.danger,.ts-root .ts-menu-item.danger .ts-menu-ico{color:var(--rose);}
+
+/* mini switch inside the Theme row */
+.ts-root .ts-mini{position:relative;flex-shrink:0;width:38px;height:22px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);}
+.ts-root .ts-mini::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--btn);box-shadow:0 2px 6px -1px rgba(0,0,0,.4);transition:transform .25s cubic-bezier(.3,1.3,.5,1);}
+.ts-root [aria-checked="true"] > .ts-mini::after{transform:translateX(16px);}
+
+@media (prefers-reduced-motion:reduce){
+.ts-root .ts-menu-panel{animation:none;}
+.ts-root .ts-menu-btn i,.ts-root .ts-mini::after{transition:none;}
+}
 
 `;
