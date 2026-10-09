@@ -2944,6 +2944,19 @@ box-shadow:0 10px 24px -14px rgba(10,30,80,.7);
 .ts-root .ts-menu-btn i,.ts-root .ts-mini::after{transition:none;}
 }
 
+/* ---------- centered title ---------- */
+.ts-root header.top{flex-wrap:wrap;}
+.ts-root .brand{flex:1 1 100%;}
+
+/* left: menu slot | middle: title | right: empty twin so the title is truly centered */
+.ts-root .brand-row{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;gap:8px;}
+.ts-root .brand-row::after{content:"";}
+.ts-root .brand .brand-row h1{width:auto;margin:0;text-align:center;}
+
+/* clock block moves under the title, centered to match */
+.ts-root .clockbox{flex:1 1 100%;text-align:center;margin-top:6px;}
+.ts-root .clockbox .followrow{justify-content:center;}
+
 /* ---------- always-floating menu ---------- */
 .ts-root .ts-menu-slot{flex-shrink:0;width:44px;height:44px;}
 
