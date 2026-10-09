@@ -1710,7 +1710,6 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
             <div className="brand-row">
               <div className="ts-menu-slot" aria-hidden="true" />
               <h1>The Session</h1>
-              <div className="ts-menu-slot" aria-hidden="true" />
             </div>
             <HeaderMenu
               theme={theme}
@@ -2993,6 +2992,24 @@ box-shadow:0 10px 24px -10px rgba(0,0,0,.55);
 max-height:calc(100dvh - env(safe-area-inset-top,0px) - 130px);
 overflow-y:auto;
 overscroll-behavior:contain;
+}
+
+/* ---------- title fit + gradient-clip fix ---------- */
+.ts-root .brand-row{gap:4px;}
+.ts-root .ts-menu-slot{width:48px;}
+
+.ts-root .brand .brand-row h1{
+font-size:clamp(20px,5.6vw,30px);
+padding:0 .14em;
+letter-spacing:-.02em;
+overflow:visible;
+}
+
+@media (max-width:420px){
+.ts-root .brand .brand-row h1{font-size:clamp(19px,5.4vw,24px);}
+.ts-root .clockbox .time{font-size:20px;}
+.ts-root .clockbox .date{font-size:11px;}
+.ts-root .followrow{font-size:10.5px;gap:5px;}
 }
 
 .ts-root .ts-menu-hamburger span{transition:transform .25s ease,opacity .18s ease;}
