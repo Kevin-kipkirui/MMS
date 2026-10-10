@@ -730,33 +730,6 @@ function HeaderMenu({ theme, onToggleTheme, onSummit, onPerformance, onNews, onN
 }
 
 // ---------- floating hologram clock ----------
-const SEG_POLY = {
-  a: "2,1 18,1 15.5,4.5 4.5,4.5",
-  b: "19,2 19,18 15.5,14.5 15.5,5.5",
-  c: "19,18 19,34 15.5,30.5 15.5,21.5",
-  d: "2,35 18,35 15.5,31.5 4.5,31.5",
-  e: "1,18 4.5,21.5 4.5,30.5 1,34",
-  f: "1,2 4.5,5.5 4.5,14.5 1,18",
-  g: "2.5,18 5,14.8 15,14.8 17.5,18 15,21.2 5,21.2",
-};
-const SEG_MAP = {
-  0: "abcdef", 1: "bc", 2: "abged", 3: "abgcd", 4: "fgbc",
-  5: "afgcd", 6: "afgedc", 7: "abc", 8: "abcdefg", 9: "abcdfg",
-};
-
-const ce = React.createElement;
-
-function HoloDigit({ ch }) {
-  const lit = ch == null ? "" : SEG_MAP[ch] || "";
-  return ce(
-    "svg",
-    { className: "ts-holo-digit", width: 19, height: 34, viewBox: "0 0 20 36", "aria-hidden": "true" },
-    Object.keys(SEG_POLY).map((k) =>
-      ce("polygon", { key: k, points: SEG_POLY[k], className: lit.includes(k) ? "on" : "off" })
-    )
-  );
-}
-
 const SESSIONS = [
   { name: "SYDNEY", tz: "Australia/Sydney", open: 8, close: 17 },
   { name: "ASIAN", tz: "Asia/Tokyo", open: 9, close: 18 },
@@ -808,35 +781,33 @@ function HoloClock() {
   hr = hr % 12 || 12;
   const hh = pad(hr);
   const mm = pad(t.getMinutes());
+  const ss = pad(t.getSeconds());
   const blink = t.getSeconds() % 2 === 0;
   const sessionLabel = activeSessionLabel(t);
 
-  return ce(
-    "div",
-    { className: "ts-holo", role: "timer", "aria-label": hh + ":" + mm + " " + ap + " " + sessionLabel },
-    ce(HoloDigit, { ch: hh[0] === "0" ? null : Number(hh[0]) }),
-    ce(HoloDigit, { ch: Number(hh[1]) }),
-    ce(
-      "svg",
-      {
-        className: "ts-holo-colon",
-        width: 7,
-        height: 34,
-        viewBox: "0 0 7 36",
-        "aria-hidden": "true",
-        style: { opacity: blink ? 1 : 0.18 },
-      },
-      ce("rect", { x: 1.5, y: 9, width: 4, height: 4, rx: 1 }),
-      ce("rect", { x: 1.5, y: 23, width: 4, height: 4, rx: 1 })
-    ),
-    ce(HoloDigit, { ch: Number(mm[0]) }),
-    ce(HoloDigit, { ch: Number(mm[1]) }),
-    ce(
-      "div",
-      { className: "ts-holo-side" },
-      ce("span", { className: "ts-holo-session" }, sessionLabel),
-      ce("span", { className: "ts-holo-meridiem" }, ap)
-    )
+  const mins = t.getHours() * 60 + t.getMinutes();
+  const start = M(10, 30);
+  const end = M(17, 0);
+  const pct = Math.max(0, Math.min(100, ((mins - start) / (end - start)) * 100));
+
+  return (
+    <div className="ts-holo" role="timer" aria-label={hh + ":" + mm + " " + ap + " " + sessionLabel}>
+      Local time
+      {ap}
+
+      <div className="ts-clk-time">
+        {hh}
+        <span className="ts-clk-colon" style={{ opacity: blink ? 1 : 0.25 }}>:</span>
+        {mm}
+        <span className="ts-clk-sec">{ss}</span>
+      </div>
+
+      <div className="ts-clk-label">{sessionLabel}</div>
+
+      <div className="ts-clk-bar" aria-hidden="true">
+        <div className="ts-clk-fill" style={{ width: pct + "%" }} />
+      </div>
+    </div>
   );
 }
 
@@ -2782,39 +2753,83 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 }
 @media (prefers-reduced-motion:reduce){.ts-confetti{display:none;}.ts-goal,.ts-goal-emoji{animation:none;}}
 
-/* ---------- floating hologram clock ---------- */
-.ts-root{--holo-glow:rgba(232,201,122,.60);}
-.ts-root[data-theme="light"]{--holo-glow:rgba(47,111,196,.50);}
+/* ---------- floating widget clock ---------- */
+.ts-root{
+--clk-bg:linear-gradient(160deg,#1c2a58 0%,#0e1634 55%,#080c1d 100%);
+--clk-border:rgba(232,201,122,.30);
+--clk-ink:#f5f7fc;
+--clk-dim:rgba(245,247,252,.55);
+--clk-track:rgba(255,255,255,.16);
+--clk-glow:rgba(232,201,122,.20);
+}
+.ts-root[data-theme="light"]{
+--clk-bg:linear-gradient(160deg,#2c5c9c 0%,#1b4180 55%,#10284f 100%);
+--clk-border:rgba(255,255,255,.32);
+--clk-glow:rgba(255,255,255,.26);
+}
 
 .ts-root .ts-holo{
-  position:fixed;
-  right:max(18px,calc(50% - 236px));
-  bottom:calc(90px + env(safe-area-inset-bottom,0px));
-  z-index:44;
-  display:flex;align-items:flex-end;gap:3px;
-  color:var(--accent-text);
-  pointer-events:none;
-  filter:drop-shadow(0 0 3px var(--holo-glow)) drop-shadow(0 0 10px var(--holo-glow));
-  animation:ts-holo-flicker 7s infinite;
+position:fixed;
+right:max(18px,calc(50% - 236px));
+bottom:calc(90px + env(safe-area-inset-bottom,0px));
+z-index:44;
+width:176px;
+padding:12px 14px 14px;
+border-radius:22px;
+background:var(--clk-bg);
+border:1px solid var(--clk-border);
+box-shadow:0 1px 0 rgba(255,255,255,.14) inset,0 18px 36px -14px rgba(0,0,0,.85);
+color:var(--clk-ink);
+overflow:hidden;
+pointer-events:none;
 }
-.ts-root .ts-holo-digit{display:block;flex-shrink:0;transform:skewX(-6deg);}
-.ts-root .ts-holo-digit polygon{fill:currentColor;}
-.ts-root .ts-holo-digit polygon.off{opacity:.11;}
-.ts-root .ts-holo-digit polygon.on{opacity:1;}
-.ts-root .ts-holo-colon{display:block;flex-shrink:0;transform:skewX(-6deg);transition:opacity .25s ease;margin:0 1px;}
-.ts-root .ts-holo-colon rect{fill:currentColor;}
-.ts-root .ts-holo-meridiem{font-size:11px;font-weight:800;letter-spacing:.08em;line-height:1;opacity:.9;margin:0 0 3px 4px;}
-.ts-root .ts-holo-side{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin:0 0 3px 4px;}
-.ts-root .ts-holo-side .ts-holo-meridiem{margin:0;}
-.ts-root .ts-holo-session{font-size:11px;font-weight:800;letter-spacing:.08em;line-height:1;opacity:.9;white-space:nowrap;}
+.ts-root .ts-holo::after{
+content:"";position:absolute;inset:0;pointer-events:none;
+background:radial-gradient(160px 90px at 100% -20%,var(--clk-glow),transparent 70%);
+}
+.ts-root .ts-holo>*{position:relative;z-index:1;}
 
-@keyframes ts-holo-flicker{
-  0%,92%,100%{opacity:1;}
-  93%{opacity:.82;}
-  94%{opacity:1;}
-  96%{opacity:.9;}
+.ts-root .ts-clk-head{display:flex;align-items:center;gap:7px;margin-bottom:8px;}
+.ts-root .ts-clk-ico{display:grid;place-items:center;color:var(--amber);flex-shrink:0;}
+.ts-root .ts-clk-title{flex:1;font-size:11.5px;font-weight:700;letter-spacing:.01em;color:var(--clk-ink);}
+.ts-root .ts-clk-ap{
+font-size:10px;font-weight:800;letter-spacing:.08em;
+padding:3px 7px;border-radius:999px;
+background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.16);
 }
-@media (prefers-reduced-motion:reduce){.ts-root .ts-holo{animation:none;}}
+
+.ts-root .ts-clk-time{
+display:flex;align-items:baseline;
+font-size:36px;font-weight:700;letter-spacing:-.04em;line-height:1;
+font-variant-numeric:tabular-nums;
+}
+.ts-root .ts-clk-colon{margin:0 1px;transition:opacity .25s ease;}
+.ts-root .ts-clk-sec{
+margin-left:6px;font-size:13px;font-weight:600;letter-spacing:0;
+color:var(--clk-dim);
+}
+
+.ts-root .ts-clk-label{
+margin-top:7px;font-size:10px;font-weight:700;letter-spacing:.08em;
+color:var(--clk-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+
+/* progress bar with the dotted "remaining" ticks, like the widget cards */
+.ts-root .ts-clk-bar{
+position:relative;height:6px;margin-top:11px;border-radius:999px;overflow:hidden;
+background:repeating-linear-gradient(90deg,var(--clk-track) 0 2px,transparent 2px 5px);
+}
+.ts-root .ts-clk-fill{
+height:100%;border-radius:999px;
+background:var(--btn);
+box-shadow:0 0 10px -1px var(--glow-amber);
+transition:width .6s ease;
+}
+
+@media (max-width:420px){
+.ts-root .ts-holo{width:160px;padding:11px 12px 13px;}
+.ts-root .ts-clk-time{font-size:32px;}
+}
 
 /* ---------- auto news: focus picker ---------- */
 .ts-root .nf-label{font-size:10.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
@@ -2945,6 +2960,16 @@ box-shadow:0 10px 24px -14px rgba(10,30,80,.7);
 .ts-root .ts-menu-panel{animation:none;}
 .ts-root .ts-menu-btn i,.ts-root .ts-mini::after{transition:none;}
 }
+
+/* ---------- centered section titles ---------- */
+.ts-root h2.section{
+flex-direction:column;
+align-items:center;
+justify-content:center;
+gap:4px;
+text-align:center;
+}
+.ts-root h2.section .sub{text-align:center;}
 
 /* ---------- header: [menu slot] [ title centered ] [ clock block ] ---------- */
 .ts-root header.top{display:flex;flex-wrap:nowrap;align-items:center;justify-content:space-between;gap:10px;}
