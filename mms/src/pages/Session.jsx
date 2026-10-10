@@ -811,6 +811,8 @@ function HoloClock() {
   );
 }
 
+const ce = React.createElement;
+
 // ---------- floating news + P&L ticker ----------
 function Ticker({ news, nowMin, netPnl, trades, tradeLimit, maxLoss, fmt, money, loading }) {
   const items = [];
