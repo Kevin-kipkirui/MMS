@@ -3362,4 +3362,4 @@ const QuickAddMenu = ({ onSelect }) => {
       </AnimatePresence>
     </div>
   );
-};
+}
