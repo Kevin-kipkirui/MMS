@@ -288,10 +288,100 @@ function buildInsights(t, fmt) {
 const esc = (s) =>
 String(s).replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">").replace(/"/g, "");
 
-const REPORT_CSS = `*{box-sizing:border-box;margin:0} body{background:#c9ccd3;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#1b2540;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:28px 12px} .page{max-width:760px;margin:0 auto;background:#f4f5f8;box-shadow:0 6px 30px rgba(0,0,0,.28);padding-bottom:26px} .bar{display:flex;align-items:center;justify-content:space-between;padding:16px 26px;background:linear-gradient(160deg,#25356a,#0a1028);color:#fff;border-bottom:3px solid #c99f48} .bar .t{font-size:24px;font-weight:800;letter-spacing:.08em} .bar .t i{font-style:normal;color:#e8c97a;margin-right:10px} .bar .pill{font-size:12px;font-weight:700;letter-spacing:.06em;padding:6px 14px;border-radius:999px;background:rgba(255,255,255,.14);border:1px solid rgba(232,201,122,.5)} .meta{display:flex;justify-content:space-between;align-items:flex-end;padding:18px 26px 0;color:#5d6b8c;font-size:13px;line-height:1.4} .meta b{color:#1b2540;font-size:15px} .meta .r{font-size:14px;font-weight:600} .hero{margin:16px 26px 0;padding:18px 20px;border-radius:18px;background:linear-gradient(155deg,#25356a,#0a1028);color:#fff;display:flex;gap:20px;align-items:center;justify-content:space-between} .hero .k{font-size:12px;opacity:.75;font-weight:600} .hero .big{font-size:40px;font-weight:800;letter-spacing:-.03em;line-height:1.05} .hero .big.pos{color:#8dffc0}.hero .big.neg{color:#ffb0a8} .hero .of{font-size:12px;opacity:.8;margin-top:4px} .hero .tw{flex:1;max-width:260px} .hero .tbar{height:10px;border-radius:99px;background:rgba(255,255,255,.2);overflow:hidden} .hero .tbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#c99f48,#f6e0a2)} .hero .tsub{font-size:11.5px;opacity:.85;margin-top:8px;text-align:right} .sec{margin:26px 26px 0} .sec h2{font-size:18px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#1f8f5f;padding-bottom:6px;border-bottom:2px solid #4a5168;margin-bottom:14px} .cols{display:grid;grid-template-columns:1fr 1fr;gap:28px} .mr{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #dfe3ec} .mr:last-child{border-bottom:none} .ml{font-size:14.5px;font-weight:700} .ms{font-size:10.5px;color:#7a86a3;margin-top:2px} .mv{text-align:right} .mv b{display:block;font-size:19px;font-weight:800;font-variant-numeric:tabular-nums} .dl{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums} .dl.up{color:#1f9d6b}.dl.dn{color:#d9534f}.dl.na{color:#9aa4bd;font-weight:500} .pos{color:#1f9d6b}.neg{color:#d9534f} .wks{display:grid;grid-template-columns:repeat(4,1fr);gap:12px} .wk{background:#fff;border:1px solid #dfe3ec;border-radius:12px;padding:12px} .wk.best{border-color:#1f9d6b;box-shadow:0 0 0 3px rgba(31,157,107,.14)} .wk.worst{border-color:#d9534f;box-shadow:0 0 0 3px rgba(217,83,79,.12)} .wk .n{font-size:13px;font-weight:800} .wk .s{font-size:10.5px;color:#7a86a3} .wk .v{font-size:19px;font-weight:800;margin:8px 0 6px;font-variant-numeric:tabular-nums} .wk .x{font-size:10.5px;color:#5d6b8c;display:flex;justify-content:space-between;margin-top:3px} .wk .x b{color:#1b2540} .tag{font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:99px;margin-left:6px} .tag.pos{background:rgba(31,157,107,.14)}.tag.neg{background:rgba(217,83,79,.14)} .br{display:grid;grid-template-columns:110px 1fr 92px;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid #dfe3ec} .br:last-child{border-bottom:none} .br .bn b{display:block;font-size:13px}.br .bn span{font-size:10.5px;color:#7a86a3} .track{position:relative;height:14px;border-radius:99px;background:#e6e9f1;overflow:hidden} .track:before{content:"";position:absolute;left:50%;top:0;bottom:0;width:1.5px;background:#b9c0d3} .track i{position:absolute;top:0;bottom:0;border-radius:99px} .br .bv{text-align:right;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums} .br .bv span{display:block;font-size:10px;color:#7a86a3;font-weight:500} .top{display:grid;grid-template-columns:repeat(5,1fr);border-top:0} .td{padding:0 12px;border-left:1px solid #d3d8e4} .td:first-child{border-left:none;padding-left:0} .td .rk{font-size:32px;font-weight:300;color:#5d6b8c;line-height:1} .td .rk sup{font-size:12px;vertical-align:top} .td .dt{font-size:11px;color:#7a86a3;margin:4px 0 10px} .td .nv{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums} .td .st{font-size:11px;color:#5d6b8c;margin-top:6px;line-height:1.5} .td .nt{font-size:10.5px;color:#5d6b8c;font-style:italic;margin-top:8px;line-height:1.4} .ins{background:#fff;border:1px solid #dfe3ec;border-radius:12px;padding:10px 14px;font-size:12.5px;line-height:1.45;margin-bottom:8px} .ins.pos{border-left:4px solid #1f9d6b}.ins.neg{border-left:4px solid #d9534f} .foot{margin:26px 26px 0;padding-top:14px;border-top:2px solid #4a5168;text-align:center;font-size:11px;color:#7a86a3;line-height:1.6} .foot b{color:#c99f48;letter-spacing:.1em} @media (max-width:640px){.cols{grid-template-columns:1fr}.wks{grid-template-columns:1fr 1fr}.top{grid-template-columns:1fr 1fr}.td{padding:10px 0;border-left:none}.hero{flex-direction:column;align-items:stretch}.hero .tw{max-width:none}} @page{margin:10mm} @media print{body{background:#fff;padding:0}.page{box-shadow:none;max-width:none}.sec,.mr,.wk,.br,.td,.ins{break-inside:avoid}}`;
+const REPORT_CSS = `*{box-sizing:border-box;margin:0} body{background:#c9ccd3;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#1b2540;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:28px 12px} .page{max-width:760px;margin:0 auto;background:#f4f5f8;box-shadow:0 6px 30px rgba(0,0,0,.28);padding-bottom:26px} .bar{display:flex;align-items:center;justify-content:space-between;padding:16px 26px;background:linear-gradient(160deg,#25356a,#0a1028);color:#fff;border-bottom:3px solid #c99f48} .bar .t{font-size:24px;font-weight:800;letter-spacing:.08em} .bar .t i{font-style:normal;color:#e8c97a;margin-right:10px} .bar .pill{font-size:12px;font-weight:700;letter-spacing:.06em;padding:6px 14px;border-radius:999px;background:rgba(255,255,255,.14);border:1px solid rgba(232,201,122,.5)} .meta{display:flex;justify-content:space-between;align-items:flex-end;padding:18px 26px 0;color:#5d6b8c;font-size:13px;line-height:1.4} .meta b{color:#1b2540;font-size:15px} .meta .r{font-size:14px;font-weight:600} .hero{margin:16px 26px 0;padding:18px 20px;border-radius:18px;background:linear-gradient(155deg,#25356a,#0a1028);color:#fff;display:flex;gap:20px;align-items:center;justify-content:space-between} .hero .k{font-size:12px;opacity:.75;font-weight:600} .hero .big{font-size:40px;font-weight:800;letter-spacing:-.03em;line-height:1.05} .hero .big.pos{color:#8dffc0}.hero .big.neg{color:#ffb0a8} .hero .of{font-size:12px;opacity:.8;margin-top:4px} .hero .tw{flex:1;max-width:260px} .hero .tbar{height:10px;border-radius:99px;background:rgba(255,255,255,.2);overflow:hidden} .hero .tbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#c99f48,#f6e0a2)} .hero .tsub{font-size:11.5px;opacity:.85;margin-top:8px;text-align:right} .sec{margin:26px 26px 0} .sec h2{font-size:18px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#1f8f5f;padding-bottom:6px;border-bottom:2px solid #4a5168;margin-bottom:14px} .cols{display:grid;grid-template-columns:1fr 1fr;gap:28px} .mr{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #dfe3ec} .mr:last-child{border-bottom:none} .ml{font-size:14.5px;font-weight:700} .ms{font-size:10.5px;color:#7a86a3;margin-top:2px} .mv{text-align:right} .mv b{display:block;font-size:19px;font-weight:800;font-variant-numeric:tabular-nums} .dl{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums} .dl.up{color:#1f9d6b}.dl.dn{color:#d9534f}.dl.na{color:#9aa4bd;font-weight:500} .pos{color:#1f9d6b}.neg{color:#d9534f} .wks{display:grid;grid-template-columns:repeat(4,1fr);gap:12px} .wk{background:#fff;border:1px solid #dfe3ec;border-radius:12px;padding:12px} .wk.best{border-color:#1f9d6b;box-shadow:0 0 0 3px rgba(31,157,107,.14)} .wk.worst{border-color:#d9534f;box-shadow:0 0 0 3px rgba(217,83,79,.12)} .wk .n{font-size:13px;font-weight:800} .wk .s{font-size:10.5px;color:#7a86a3} .wk .v{font-size:19px;font-weight:800;margin:8px 0 6px;font-variant-numeric:tabular-nums} .wk .x{font-size:10.5px;color:#5d6b8c;display:flex;justify-content:space-between;margin-top:3px} .wk .x b{color:#1b2540} .tag{font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:99px;margin-left:6px} .tag.pos{background:rgba(31,157,107,.14)}.tag.neg{background:rgba(217,83,79,.14)} .br{display:grid;grid-template-columns:110px 1fr 92px;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid #dfe3ec} .br:last-child{border-bottom:none} .br .bn b{display:block;font-size:13px}.br .bn span{font-size:10.5px;color:#7a86a3} .track{position:relative;height:14px;border-radius:99px;background:#e6e9f1;overflow:hidden} .track:before{content:"";position:absolute;left:50%;top:0;bottom:0;width:1.5px;background:#b9c0d3} .track i{position:absolute;top:0;bottom:0;border-radius:99px} .br .bv{text-align:right;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums} .br .bv span{display:block;font-size:10px;color:#7a86a3;font-weight:500} .top{display:grid;grid-template-columns:repeat(5,1fr);border-top:0} .td{padding:0 12px;border-left:1px solid #d3d8e4} .td:first-child{border-left:none;padding-left:0} .td .rk{font-size:32px;font-weight:300;color:#5d6b8c;line-height:1} .td .rk sup{font-size:12px;vertical-align:top} .td .dt{font-size:11px;color:#7a86a3;margin:4px 0 10px} .td .nv{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums} .td .st{font-size:11px;color:#5d6b8c;margin-top:6px;line-height:1.5} .td .nt{font-size:10.5px;color:#5d6b8c;font-style:italic;margin-top:8px;line-height:1.4} .ins{background:#fff;border:1px solid #dfe3ec;border-radius:12px;padding:10px 14px;font-size:12.5px;line-height:1.45;margin-bottom:8px} .ins.pos{border-left:4px solid #1f9d6b}.ins.neg{border-left:4px solid #d9534f} .foot{margin:26px 26px 0;padding-top:14px;border-top:2px solid #4a5168;text-align:center;font-size:11px;color:#7a86a3;line-height:1.6} .foot b{color:#c99f48;letter-spacing:.1em} @media (max-width:640px){.cols{grid-template-columns:1fr}.wks{grid-template-columns:1fr 1fr}.top{grid-template-columns:1fr 1fr}.td{padding:10px 0;border-left:none}.hero{flex-direction:column;align-items:stretch}.hero .tw{max-width:none}} .ghs{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}.ghs>div{background:#fff;border:1px solid #dfe3ec;border-radius:12px;padding:10px 6px;text-align:center}.ghs b{display:block;font-size:16px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}.ghs span{font-size:10.5px;color:#7a86a3;font-weight:600}.gh{background:#fff;border:1px solid #dfe3ec;border-radius:12px;padding:12px 14px}.ghl{display:flex;align-items:center;gap:4px;margin-top:10px;font-size:10.5px;color:#7a86a3}.ghl i{width:11px;height:11px;border-radius:3px;display:inline-block}.ghl em{margin-left:auto;font-style:italic}@media (max-width:640px){.ghs{grid-template-columns:1fr 1fr}}@page{margin:10mm} @media print{body{background:#fff;padding:0}.page{box-shadow:none;max-width:none}.sec,.mr,.wk,.br,.td,.ins,.gh,.ghs>div{break-inside:avoid}}`;
+
+// ---------- contribution grid (borrowed from Summit) ----------
+const GH_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// Weeks run Sunday to Saturday and end on `endDate`, so every row lines up.
+function ghWeeks(entries, endDate, weeks = 26) {
+  const byDate = {};
+  entries.forEach((e) => { byDate[e.date] = e; });
+  const end = new Date(endDate);
+  end.setHours(0, 0, 0, 0);
+  const endPad = 6 - end.getDay();
+  const startOffset = (weeks - 1) * 7 + end.getDay();
+  const days = [];
+  for (let i = startOffset; i >= -endPad; i--) {
+    const d = new Date(end);
+    d.setDate(d.getDate() - i);
+    const key = todayKey(d);
+    days.push({ date: key, month: d.getMonth(), entry: byDate[key] || null, future: d > end });
+  }
+  const grid = [];
+  for (let i = 0; i < days.length; i += 7) grid.push(days.slice(i, i + 7));
+  return grid;
+}
+
+// colours tuned for the report's light page
+function ghColor(day) {
+  if (day.future) return "#eef0f5";
+  if (!day.entry) return "#e3e7ef";
+  const n = day.entry.net || 0;
+  if (n > 0) return n > 300 ? "#1e8a3c" : n > 100 ? "#2fa24f" : "#56c46f";
+  if (n < 0) return n < -300 ? "#a3201c" : n < -100 ? "#c9342c" : "#e2665f";
+  return "#b9c0d3";
+}
+
+function buildActivityHTML(entries, monthKey, fmt, money) {
+  const y = Number(monthKey.slice(0, 4));
+  const m = Number(monthKey.slice(5, 7)) - 1;
+  const today = new Date();
+  const isCurrent = monthKey === todayKey(today).slice(0, 7);
+  const endDate = isCurrent ? today : new Date(y, m + 1, 0);
+  const weeks = ghWeeks(entries, endDate, 26);
+
+  let green = 0, red = 0, total = 0, best = null;
+  weeks.forEach((w) => w.forEach((d) => {
+    if (!d.entry || d.future) return;
+    const n = d.entry.net || 0;
+    total += n;
+    if (n > 0) green++;
+    if (n < 0) red++;
+    if (best === null || n > best) best = n;
+  }));
+
+  const C = 11, G = 3, LEFT = 22, TOP = 16, step = C + G;
+  const W = LEFT + weeks.length * step;
+  const H = TOP + 7 * step;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Trading activity, last 6 months">`;
+
+  [["M", 1], ["W", 3], ["F", 5]].forEach(([t, r]) => {
+    svg += `<text x="0" y="${TOP + r * step + 9}" font-size="8.5" font-weight="600" fill="#7a86a3">${t}</text>`;
+  });
+
+  weeks.forEach((w, wi) => {
+    const x = LEFT + wi * step;
+    if (wi === 0 || w[0].month !== weeks[wi - 1][0].month) {
+      svg += `<text x="${x}" y="10" font-size="9" font-weight="600" fill="#7a86a3">${GH_MONTHS[w[0].month]}</text>`;
+    }
+    w.forEach((d, di) => {
+      const inMonth = d.date.startsWith(monthKey);
+      const tip = d.entry ? `${d.date}: ${fmt(d.entry.net || 0)}` : d.date;
+      svg += `<rect x="${x}" y="${TOP + di * step}" width="${C}" height="${C}" rx="3" fill="${ghColor(d)}" opacity="${inMonth ? 1 : 0.55}"><title>${esc(tip)}</title></rect>`;
+    });
+  });
+  svg += "</svg>";
+
+  const tone = (v) => (v > 0 ? "pos" : v < 0 ? "neg" : "");
+  const stat = (v, l, c) => `<div><b class="${c || ""}">${v}</b><span>${l}</span></div>`;
+
+  return `
+
+## Trading activity last 6 months
+
+${stat(green, "Green days", "pos")}${stat(red, "Red days", "neg")}${stat(best === null ? "—" : fmt(best), "Best day", best === null ? "" : tone(best))}${stat(fmt(total), "6-month net", tone(total))}
+
+${svg}
+
+Loss********Win*Brighter cells are the month in this report*
+
+`;
+}
 
 function buildReportHTML(o) {
-const { monthKey, stats, prev, monthDays, weekData, weekInsights, timeData, insights, currency, target, weekLabel, timeLabel } = o;
+const { monthKey, stats, prev, monthDays, weekData, weekInsights, timeData, insights, currency, target, weekLabel, timeLabel, entries } = o;
 const money = (n) => currency + Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
 const fmt = (n) => (n > 0 ? "+" : n < 0 ? "\u2212" : "") + money(n);
 const pct = (v) => (v == null ? "\u2014" : Math.round(v) + "%");
@@ -402,6 +492,7 @@ ${esc(x.text)}
 `).join("")}</div>`
 : "";
 
+const activityHtml = buildActivityHTML(entries || [], monthKey, fmt, money);
 const tp = target > 0 ? Math.max(0, Math.min(100, (stats.net / target) * 100)) : 0;
 const heroRight = target > 0
 ? `<div class="tw"><div class="tbar"><i style="width:${tp}%"></i></div><div class="tsub">${Math.round(tp)}% of ${money(target)} target</div></div>`
@@ -431,6 +522,7 @@ ${dailySvg}
 ## Equity curve
 ${equitySvg}
 
+${activityHtml}
 ${weeksHtml}${timesHtml}${topHtml}${insHtml}
 **THE SESSION**
 Win rate = wins \u00F7 (wins + losses). Trades within \u00B1${money(BE_LIMIT)} count as break-even.
@@ -744,6 +836,7 @@ export default function Performance({ onBack } = {}) {
 
   const reportPayload = () => ({
     monthKey, stats, prev: prevStats, monthDays, weekData, weekInsights, timeData, insights, currency, target,
+    entries,
     weekLabel: weekScope === "year" ? yearKey : "All time",
     timeLabel: scope === "month" ? monthLabel(monthKey, true) : "All time",
   });
