@@ -993,6 +993,22 @@ export default function Performance({ onBack } = {}) {
     () => resolvePeriod(periodId, monthKey, entries, custom),
     [periodId, monthKey, entries, custom]
   );
+  const reportStats = useMemo(() => computeStats(reportDays), [reportDays]);
+
+  const reportRange = reportDays.length
+    ? reportDays.length === 1
+      ? fmtDate(reportDays[0].date)
+      : fmtDate(reportDays[0].date) + " \u2013 " + fmtDate(reportDays[reportDays.length - 1].date)
+    : "";
+
+  const periodShort = (o) =>
+    o.id === "month" ? monthLabel(monthKey, true)
+    : o.id === "last3" ? "3 months"
+    : o.id === "last6" ? "6 months"
+    : o.id === "ytd" ? "Year to date"
+    : o.id === "all" ? "All time"
+    : o.id === "custom" ? "Custom"
+    : o.id.slice(2); // "y:2026" -> "2026"
 
   const reportPayload = () => ({
     days: reportDays,
@@ -1105,39 +1121,6 @@ export default function Performance({ onBack } = {}) {
           )}
         </div>
 
-        <div className="pf-report-card">
-          <div className="pf-report-head">
-            <div>
-              <div className="pf-report-kicker">Report</div>
-              <div className="pf-report-label">{monthLabel(monthKey)}</div>
-            </div>
-            <div className="pf-report-actions">
-              <button type="button" className="pf-report-btn" onClick={onDownloadReport} disabled={!reportDays.length}>Download</button>
-              <button type="button" className="pf-report-btn primary" onClick={onPrintReport} disabled={!reportDays.length}>Print</button>
-            </div>
-          </div>
-
-          <div className="pf-rp">
-            <label className="pf-rp-l" htmlFor="pf-period">Report period</label>
-            <select id="pf-period" className="pf-rp-sel" value={periodId} onChange={(e) => setPeriodId(e.target.value)}>
-              {periodOptions.map((o) => (
-                <option key={o.id} value={o.id}>{o.label}</option>
-              ))}
-            </select>
-            {periodId === "custom" && (
-              <div className="pf-rp-dates">
-                <input type="date" value={custom.from} max={custom.to || undefined} onChange={(e) => setCustom({ ...custom, from: e.target.value })} />
-                <input type="date" value={custom.to} min={custom.from || undefined} onChange={(e) => setCustom({ ...custom, to: e.target.value })} />
-              </div>
-            )}
-            <div className="pf-rp-meta">
-              {reportDays.length
-                ? `${reportDays.length} trading ${reportDays.length === 1 ? "day" : "days"} included`
-                : "No trading days in this period"}
-            </div>
-          </div>
-        </div>
-
         {/* report */}
         <div className="pf-report">
           <div className="pf-report-head">
@@ -1149,27 +1132,55 @@ export default function Performance({ onBack } = {}) {
             </div>
             <div>
               <h3>Performance report</h3>
-              <p>A formal report of your results. Mon–Fri trading days only.</p>
+              <p>Investor-style report · Mon–Fri only</p>
             </div>
           </div>
 
-          <div>
-            <label className="pf-report-l" htmlFor="pf-period">Period</label>
-            <select id="pf-period" className="pf-report-sel" value={periodId} onChange={(e) => setPeriodId(e.target.value)}>
-              {periodOptions.map((o) => (
-                <option key={o.id} value={o.id}>{o.label}</option>
-              ))}
-            </select>
-            {periodId === "custom" && (
-              <div className="pf-report-dates">
-                <input type="date" value={custom.from} max={custom.to || undefined} onChange={(e) => setCustom({ ...custom, from: e.target.value })} />
-                <input type="date" value={custom.to} min={custom.from || undefined} onChange={(e) => setCustom({ ...custom, to: e.target.value })} />
+          <div className="pf-report-grid">
+            <div className="pf-report-col">
+              <div className="pf-report-stat">
+                <span>{reportDays.length} {reportDays.length === 1 ? "day" : "days"}</span>
               </div>
-            )}
-            <div className="pf-report-meta">
-              {reportDays.length
-                ? `${reportDays.length} trading ${reportDays.length === 1 ? "day" : "days"} included`
-                : "No trading days in this period"}
+            </div>
+            <div className="pf-report-col">
+              <div className="pf-report-label">Period</div>
+              <select id="pf-period" className="pf-report-sel" value={periodId} onChange={(e) => setPeriodId(e.target.value)}>
+                {periodOptions.map((o) => (
+                  <option key={o.id} value={o.id}>{periodShort(o)}</option>
+                ))}
+              </select>
+              {periodId === "custom" && (
+                <div className="pf-report-dates">
+                  <div>
+                    <label className="pf-report-l">From</label>
+                    <input type="date" value={custom.from} max={custom.to || undefined} onChange={(e) => setCustom({ ...custom, from: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="pf-report-l">To</label>
+                    <input type="date" value={custom.to} min={custom.from || undefined} onChange={(e) => setCustom({ ...custom, to: e.target.value })} />
+                  </div>
+                </div>
+              )}
+              <div className="pf-report-meta">{reportDays.length ? reportRange : "No trading days in this period"}</div>
+            </div>
+          </div>
+
+          <div className="pf-report-metrics">
+            <div className="pf-report-metric">
+              <span>Net</span>
+              <strong>{reportDays.length ? fmt(reportStats.net) : "—"}</strong>
+            </div>
+            <div className="pf-report-metric">
+              <span>Win rate</span>
+              <strong>{pct(reportStats.winRate)}</strong>
+            </div>
+            <div className="pf-report-metric">
+              <span>Trades</span>
+              <strong>{reportDays.length ? reportStats.trades : "—"}</strong>
+            </div>
+            <div className="pf-report-metric">
+              <span>Profit factor</span>
+              <strong>{pfText(reportStats.pf)}</strong>
             </div>
           </div>
 
@@ -1546,19 +1557,6 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .pf-theme{margin-left:auto;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);border-radius:var(--r-pill);padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);transition:all .18s ease;}
 .pf-theme:hover{border-color:var(--amber);color:var(--text);}
 
-.pf-report-card{background:var(--surface);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--border);box-shadow:var(--shadow-card);border-radius:26px;padding:16px;margin:0 0 18px;}
-.pf-report-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;}
-.pf-report-kicker{font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
-.pf-report-label{font-size:16px;font-weight:800;letter-spacing:-.02em;}
-.pf-report-actions{display:flex;gap:8px;}
-.pf-report-btn{border:1px solid var(--border);background:var(--surface-2);color:var(--text);font:inherit;font-size:12px;font-weight:700;border-radius:12px;padding:9px 12px;cursor:pointer;}
-.pf-report-btn.primary{background:var(--btn);border-color:transparent;color:var(--on-accent);}
-.pf-report-btn:disabled{opacity:.45;cursor:default;}
-.pf-rp{padding:0;}
-.pf-rp-l{display:block;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
-.pf-rp-sel,.pf-rp-dates input{width:100%;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:9px 10px;font:inherit;font-size:12.5px;font-weight:600;}
-.pf-rp-dates{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
-.pf-rp-meta{font-size:11px;color:var(--muted);margin-top:10px;}
 .pf-root:not([data-theme="light"])::after{
   content:""; position:fixed; left:0; right:0; top:0; height:360px; pointer-events:none; z-index:0;
   background-image:
@@ -1591,30 +1589,51 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .pf-section{flex-direction:column;align-items:center;justify-content:center;gap:4px;text-align:center;}
 .pf-sub{text-align:center;}
 
-/* ---------- report button + menu ---------- */
-.pf-dl-wrap{position:relative;}
-.pf-dl{display:inline-flex;align-items:center;gap:6px;border:none;background:var(--btn);color:var(--on-accent);border-radius:var(--r-pill);padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;box-shadow:0 8px 18px -8px var(--glow-amber);transition:transform .15s ease,opacity .15s ease;}
-.pf-dl:active{transform:scale(.97);}
-.pf-dl:disabled{opacity:.4;cursor:default;box-shadow:none;}
-.pf-dl-menu{position:absolute;right:0;top:calc(100% + 10px);z-index:50;width:min(260px,calc(100vw - 36px));padding:8px;border-radius:20px;background:var(--modal-bg);border:1px solid var(--border);box-shadow:var(--shadow-card);animation:pf-menu-in .18s cubic-bezier(.2,.9,.3,1);transform-origin:top right;}
-.pf-dl-menu button{display:block;width:100%;text-align:left;border:0;background:none;color:var(--text);padding:11px 14px;border-radius:14px;cursor:pointer;}
-.pf-dl-menu button:hover,.pf-dl-menu button:focus-visible{background:var(--surface-2);outline:none;}
-.pf-dl-menu b{display:block;font-size:13.5px;font-weight:700;}
-.pf-dl-menu span{display:block;font-size:11px;color:var(--muted);margin-top:2px;}
-@keyframes pf-menu-in{from{opacity:0;transform:translateY(-6px) scale(.97);}to{opacity:1;transform:none;}}
+/* ---------- report card ---------- */
+.pf-rep{position:relative;overflow:hidden;margin:0 0 6px;padding:16px;border-radius:var(--r-card);background:var(--surface);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--border);box-shadow:var(--shadow-card);}
+.pf-rep::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--btn);opacity:.9;}
+.pf-rep-top{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+.pf-rep-ico{flex:none;width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:var(--amber-dim);color:var(--accent-text);border:1px solid var(--border);}
+.pf-rep-ico svg{width:20px;height:20px;}
+.pf-rep-titles{flex:1;min-width:0;}
+.pf-rep-titles h3{margin:0;font-size:15.5px;font-weight:800;letter-spacing:-.01em;}
+.pf-rep-titles p{margin:2px 0 0;font-size:12px;color:var(--muted);}
+.pf-rep-badge{flex:none;font-size:11px;font-weight:800;padding:5px 11px;border-radius:var(--r-pill);background:var(--surface-2);border:1px solid var(--border);color:var(--muted);font-variant-numeric:tabular-nums;}
+.pf-rep-badge.ok{background:var(--teal-dim);border-color:transparent;color:var(--teal);}
+
+.pf-rep-label{font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+.pf-rep-chips{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 10px;margin:0 -2px;scrollbar-width:none;}
+.pf-rep-chips::-webkit-scrollbar{display:none;}
+.pf-rep-chip{flex-shrink:0;padding:8px 14px;border-radius:var(--r-pill);font-size:12px;font-weight:700;border:1px solid var(--border);background:var(--surface-2);color:var(--muted);cursor:pointer;transition:all .2s ease;}
+.pf-rep-chip:hover{color:var(--text);}
+.pf-rep-chip.on{background:var(--btn);color:var(--on-accent);border-color:transparent;}
+.pf-root:not([data-theme="light"]) .pf-rep-chip.on{box-shadow:0 8px 18px -8px rgba(232,201,122,.5);}
+
+.pf-rep-dates{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:2px 0 10px;}
+.pf-rep-dates label span{display:block;font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:4px;}
+.pf-rep-dates input{width:100%;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:var(--r-input);padding:10px 11px;font:inherit;font-size:12.5px;font-weight:600;}
+
+.pf-rep-range{font-size:12px;font-weight:600;color:var(--muted);margin:0 2px 12px;font-variant-numeric:tabular-nums;}
+
+.pf-rep-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;}
+.pf-rep-stat{background:var(--surface-2);border:1px solid var(--border);border-radius:16px;padding:10px 6px;text-align:center;min-width:0;}
+.pf-rep-stat span{display:block;font-size:10px;font-weight:700;color:var(--muted);margin-bottom:5px;white-space:nowrap;}
+.pf-rep-stat b{display:block;font-size:14.5px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pf-rep-stat b.pos{color:var(--teal);}
+.pf-rep-stat b.neg{color:var(--rose);}
+
+.pf-rep-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.pf-rep-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:var(--r-input);padding:13px 10px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;transition:transform .15s ease,opacity .15s ease,border-color .15s ease;}
+.pf-rep-btn svg{width:16px;height:16px;flex:none;}
+.pf-rep-btn:active{transform:scale(.98);}
+.pf-rep-btn.primary{border:none;background:var(--btn);color:var(--on-accent);box-shadow:0 10px 20px -10px var(--glow-amber);}
+.pf-rep-btn.ghost{border:1px solid var(--border);background:var(--surface-2);color:var(--text);}
+.pf-rep-btn.ghost:hover{border-color:var(--amber);}
+.pf-rep-btn:disabled{opacity:.4;cursor:default;box-shadow:none;}
 
 @media (max-width:420px){
-  .pf-dl span{display:none;}
-  .pf-dl{padding:9px 11px;}
-  .pf-back{padding:7px 10px;}
+  .pf-rep-stat b{font-size:13px;}
+  .pf-rep-btn{font-size:12.5px;padding:12px 6px;}
 }
-.pf-dl-menu{width:min(290px,calc(100vw - 36px));}
-.pf-rp{padding:10px 12px 8px;border-bottom:1px solid var(--border);margin-bottom:6px;}
-.pf-rp-l{display:block;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
-.pf-rp-sel,.pf-rp-dates input{width:100%;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:9px 10px;font:inherit;font-size:12.5px;font-weight:600;}
-.pf-rp-dates{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;}
-.pf-rp-meta{font-size:11px;color:var(--muted);margin-top:8px;}
-.pf-dl-menu button:disabled{opacity:.4;cursor:default;}
-.pf-dl-menu .pf-dl-title{font-size:13.5px;font-weight:700;color:var(--text);margin-top:0;}
-@media (prefers-reduced-motion:reduce){.pf-dl-menu{animation:none;}}
+@media (max-width:340px){.pf-rep-actions{grid-template-columns:1fr;}}
 `;
