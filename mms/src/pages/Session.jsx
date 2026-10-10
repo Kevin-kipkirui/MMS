@@ -731,10 +731,10 @@ function HeaderMenu({ theme, onToggleTheme, onSummit, onPerformance, onNews, onN
 
 // ---------- floating hologram clock ----------
 const SESSIONS = [
-  { name: "SYDNEY", tz: "Australia/Sydney", open: 8, close: 17 },
-  { name: "ASIAN", tz: "Asia/Tokyo", open: 9, close: 18 },
-  { name: "LONDON", tz: "Europe/London", open: 8, close: 17 },
-  { name: "NEW YORK", tz: "America/New_York", open: 8, close: 17 },
+  { name: "SYDNEY", short: "SYD", tz: "Australia/Sydney", open: 8, close: 17 },
+  { name: "ASIAN", short: "ASIA", tz: "Asia/Tokyo", open: 9, close: 18 },
+  { name: "LONDON", short: "LDN", tz: "Europe/London", open: 8, close: 17 },
+  { name: "NEW YORK", short: "NYC", tz: "America/New_York", open: 8, close: 17 },
 ];
 
 const sessionFmtCache = {};
@@ -750,7 +750,7 @@ function sessionFmt(tz) {
   return sessionFmtCache[tz];
 }
 
-function activeSessionLabel(date) {
+function activeSessionLabel(date, short) {
   try {
     const open = SESSIONS.filter((s) => {
       let wd = "";
@@ -761,8 +761,8 @@ function activeSessionLabel(date) {
       });
       if (wd === "Sat" || wd === "Sun") return false;
       return h >= s.open && h < s.close;
-    }).map((s) => s.name);
-    return open.length ? open.join(" + ") : "MARKETS CLOSED";
+    }).map((s) => (short ? s.short : s.name));
+    return open.length ? open.join(" + ") : short ? "CLOSED" : "MARKETS CLOSED";
   } catch (e) {
     return "";
   }
@@ -807,8 +807,9 @@ function HoloClock() {
   const mm = pad(t.getMinutes());
   const ss = pad(t.getSeconds());
   const blink = t.getSeconds() % 2 === 0;
-  const sessionLabel = activeSessionLabel(t);
-  const marketOpen = !!sessionLabel && sessionLabel !== "MARKETS CLOSED";
+  const fullLabel = activeSessionLabel(t); // for screen readers + the open/closed check
+  const sessionLabel = activeSessionLabel(t, true); // short text shown on screen
+  const marketOpen = !!fullLabel && fullLabel !== "MARKETS CLOSED";
 
   // progress through the 10:30 – 17:00 trading day
   const mins = t.getHours() * 60 + t.getMinutes();
@@ -820,7 +821,7 @@ function HoloClock() {
     <div
       className={"ts-clock" + (away ? " away" : "")}
       role="timer"
-      aria-label={hh + ":" + mm + " " + ap + " " + sessionLabel}
+      aria-label={hh + ":" + mm + " " + ap + " " + fullLabel}
     >
       <span className={"ts-clock-dot" + (marketOpen ? " live" : "")} />
       <span className="ts-clock-time">
@@ -2619,7 +2620,7 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .ts-root .resetlink:hover{color:var(--text);}
 
 /* ---------- floating "back to now" pill ---------- */
-.ts-root .nowbtn{position:fixed;left:50%;transform:translate(-50%,16px);bottom:calc(128px + env(safe-area-inset-bottom,0px));z-index:40;display:flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--surface);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);color:var(--text);border-radius:var(--r-pill);padding:10px 18px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 14px 30px -10px rgba(5,15,40,.55);opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;}
+.ts-root .nowbtn{position:fixed;left:50%;transform:translate(-50%,16px);bottom:calc(140px + env(safe-area-inset-bottom,0px));z-index:40;display:flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--surface);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);color:var(--text);border-radius:var(--r-pill);padding:10px 18px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 14px 30px -10px rgba(5,15,40,.55);opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;}
 .ts-root .nowbtn.show{opacity:1;pointer-events:auto;transform:translate(-50%,0);}
 .ts-root .nowbtn:hover{border-color:var(--amber);}
 .ts-root .nowbtn .pulse{width:8px;height:8px;border-radius:50%;background:var(--amber);flex-shrink:0;box-shadow:0 0 0 4px var(--amber-dim);}
@@ -2804,9 +2805,10 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 }
 .ts-root .ts-clock{
 position:fixed;z-index:58;left:50%;
-top:calc(env(safe-area-inset-top,0px) + 40px);
-display:flex;align-items:center;gap:9px;
-height:28px;padding:0 14px;max-width:calc(100vw - 150px);
+bottom:calc(96px + env(safe-area-inset-bottom,0px));
+display:flex;align-items:center;justify-content:center;gap:11px;
+height:30px;padding:0 18px;
+min-width:min(300px,calc(100vw - 28px));max-width:calc(100vw - 28px);
 border-radius:10px;
 background:var(--ck-bg);border:1px solid var(--ck-border);
 -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
@@ -2816,7 +2818,7 @@ font-variant-numeric:tabular-nums;
 transform:translate(-50%,0);opacity:1;
 transition:opacity .4s ease,transform .4s ease;
 }
-.ts-root .ts-clock.away{opacity:0;transform:translate(-50%,-8px);}
+.ts-root .ts-clock.away{opacity:0;transform:translate(-50%,8px);}
 .ts-root .ts-clock-dot{flex-shrink:0;width:6px;height:6px;border-radius:50%;background:var(--ck-dim);opacity:.6;}
 .ts-root .ts-clock-dot.live{background:var(--ck-live);opacity:1;box-shadow:0 0 0 3px var(--teal-dim);animation:ts-ck-pulse 2.4s ease-in-out infinite;}
 @keyframes ts-ck-pulse{0%,100%{box-shadow:0 0 0 2px var(--teal-dim);}50%{box-shadow:0 0 0 5px transparent;}}
@@ -2896,7 +2898,7 @@ transition:opacity .4s ease,transform .4s ease;
 }
 
 /* make room for the fixed ticker */
-.ts-root .wrap{padding-top:70px;}
+.ts-root .wrap{padding-top:62px;}
 .ts-root [id^="ts-"]{scroll-margin-top:52px;}
 
 /* ---------- light theme: make the ticker readable (navy bar, bright text) ---------- */
