@@ -2041,7 +2041,7 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
           </>
         )}
 
-        <h2 className="section">End-of-day log</h2>
+        <h2 className="section">Trading Debrief</h2>
         <div className="logcard">
           <div className="logstats">
             <div className="logstat">

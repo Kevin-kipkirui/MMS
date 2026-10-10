@@ -284,250 +284,368 @@ function buildInsights(t, fmt) {
   return out;
 }
 
-// ---------- report export ----------
+// ---------- report export (one-page investor summary) ----------
 const esc = (s) =>
 String(s).replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">").replace(/"/g, "");
 
-const REPORT_CSS = `*{box-sizing:border-box;margin:0} body{background:#c9ccd3;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#1b2540;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:28px 12px} .page{max-width:760px;margin:0 auto;background:#f4f5f8;box-shadow:0 6px 30px rgba(0,0,0,.28);padding-bottom:26px} .bar{display:flex;align-items:center;justify-content:space-between;padding:16px 26px;background:linear-gradient(160deg,#25356a,#0a1028);color:#fff;border-bottom:3px solid #c99f48} .bar .t{font-size:24px;font-weight:800;letter-spacing:.08em} .bar .t i{font-style:normal;color:#e8c97a;margin-right:10px} .bar .pill{font-size:12px;font-weight:700;letter-spacing:.06em;padding:6px 14px;border-radius:999px;background:rgba(255,255,255,.14);border:1px solid rgba(232,201,122,.5)} .meta{display:flex;justify-content:space-between;align-items:flex-end;padding:18px 26px 0;color:#5d6b8c;font-size:13px;line-height:1.4} .meta b{color:#1b2540;font-size:15px} .meta .r{font-size:14px;font-weight:600} .hero{margin:16px 26px 0;padding:18px 20px;border-radius:18px;background:linear-gradient(155deg,#25356a,#0a1028);color:#fff;display:flex;gap:20px;align-items:center;justify-content:space-between} .hero .k{font-size:12px;opacity:.75;font-weight:600} .hero .big{font-size:40px;font-weight:800;letter-spacing:-.03em;line-height:1.05} .hero .big.pos{color:#8dffc0}.hero .big.neg{color:#ffb0a8} .hero .of{font-size:12px;opacity:.8;margin-top:4px} .hero .tw{flex:1;max-width:260px} .hero .tbar{height:10px;border-radius:99px;background:rgba(255,255,255,.2);overflow:hidden} .hero .tbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#c99f48,#f6e0a2)} .hero .tsub{font-size:11.5px;opacity:.85;margin-top:8px;text-align:right} .sec{margin:26px 26px 0} .sec h2{font-size:18px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#1f8f5f;padding-bottom:6px;border-bottom:2px solid #4a5168;margin-bottom:14px} .cols{display:grid;grid-template-columns:1fr 1fr;gap:28px} .mr{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #dfe3ec} .mr:last-child{border-bottom:none} .ml{font-size:14.5px;font-weight:700} .ms{font-size:10.5px;color:#7a86a3;margin-top:2px} .mv{text-align:right} .mv b{display:block;font-size:19px;font-weight:800;font-variant-numeric:tabular-nums} .dl{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums} .dl.up{color:#1f9d6b}.dl.dn{color:#d9534f}.dl.na{color:#9aa4bd;font-weight:500} .pos{color:#1f9d6b}.neg{color:#d9534f} .wks{display:grid;grid-template-columns:repeat(4,1fr);gap:12px} .wk{background:#fff;border:1px solid #dfe3ec;border-radius:12px;padding:12px} .wk.best{border-color:#1f9d6b;box-shadow:0 0 0 3px rgba(31,157,107,.14)} .wk.worst{border-color:#d9534f;box-shadow:0 0 0 3px rgba(217,83,79,.12)} .wk .n{font-size:13px;font-weight:800} .wk .s{font-size:10.5px;color:#7a86a3} .wk .v{font-size:19px;font-weight:800;margin:8px 0 6px;font-variant-numeric:tabular-nums} .wk .x{font-size:10.5px;color:#5d6b8c;display:flex;justify-content:space-between;margin-top:3px} .wk .x b{color:#1b2540} .tag{font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:99px;margin-left:6px} .tag.pos{background:rgba(31,157,107,.14)}.tag.neg{background:rgba(217,83,79,.14)} .br{display:grid;grid-template-columns:110px 1fr 92px;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid #dfe3ec} .br:last-child{border-bottom:none} .br .bn b{display:block;font-size:13px}.br .bn span{font-size:10.5px;color:#7a86a3} .track{position:relative;height:14px;border-radius:99px;background:#e6e9f1;overflow:hidden} .track:before{content:"";position:absolute;left:50%;top:0;bottom:0;width:1.5px;background:#b9c0d3} .track i{position:absolute;top:0;bottom:0;border-radius:99px} .br .bv{text-align:right;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums} .br .bv span{display:block;font-size:10px;color:#7a86a3;font-weight:500} .top{display:grid;grid-template-columns:repeat(5,1fr);border-top:0} .td{padding:0 12px;border-left:1px solid #d3d8e4} .td:first-child{border-left:none;padding-left:0} .td .rk{font-size:32px;font-weight:300;color:#5d6b8c;line-height:1} .td .rk sup{font-size:12px;vertical-align:top} .td .dt{font-size:11px;color:#7a86a3;margin:4px 0 10px} .td .nv{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums} .td .st{font-size:11px;color:#5d6b8c;margin-top:6px;line-height:1.5} .td .nt{font-size:10.5px;color:#5d6b8c;font-style:italic;margin-top:8px;line-height:1.4} .ins{background:#fff;border:1px solid #dfe3ec;border-radius:12px;padding:10px 14px;font-size:12.5px;line-height:1.45;margin-bottom:8px} .ins.pos{border-left:4px solid #1f9d6b}.ins.neg{border-left:4px solid #d9534f} .foot{margin:26px 26px 0;padding-top:14px;border-top:2px solid #4a5168;text-align:center;font-size:11px;color:#7a86a3;line-height:1.6} .foot b{color:#c99f48;letter-spacing:.1em} @media (max-width:640px){.cols{grid-template-columns:1fr}.wks{grid-template-columns:1fr 1fr}.top{grid-template-columns:1fr 1fr}.td{padding:10px 0;border-left:none}.hero{flex-direction:column;align-items:stretch}.hero .tw{max-width:none}} .ghs{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}.ghs>div{background:#fff;border:1px solid #dfe3ec;border-radius:12px;padding:10px 6px;text-align:center}.ghs b{display:block;font-size:16px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}.ghs span{font-size:10.5px;color:#7a86a3;font-weight:600}.gh{background:#fff;border:1px solid #dfe3ec;border-radius:12px;padding:12px 14px}.ghl{display:flex;align-items:center;gap:4px;margin-top:10px;font-size:10.5px;color:#7a86a3}.ghl i{width:11px;height:11px;border-radius:3px;display:inline-block}.ghl em{margin-left:auto;font-style:italic}@media (max-width:640px){.ghs{grid-template-columns:1fr 1fr}}@page{margin:10mm} @media print{body{background:#fff;padding:0}.page{box-shadow:none;max-width:none}.sec,.mr,.wk,.br,.td,.ins,.gh,.ghs>div{break-inside:avoid}}`;
+const REPORT_CSS = `
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#cfd3dc}
+body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#10193a;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:24px 0}
+.page{width:794px;height:1123px;margin:0 auto;background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.3);display:flex;flex-direction:column;overflow:hidden}
+.pos{color:#14925f}.neg{color:#d64545}
 
-// ---------- contribution grid (borrowed from Summit) ----------
+.hd{height:96px;flex:none;background:linear-gradient(135deg,#17224d 0%,#0a1028 72%);color:#fff;padding:0 36px;display:flex;align-items:center;justify-content:space-between;border-bottom:4px solid #c99f48}
+.hd .l{display:flex;align-items:center;gap:14px}
+.mark{width:42px;height:42px;border-radius:11px;border:1.5px solid #c99f48;display:grid;place-items:center;background:rgba(201,159,72,.1)}
+.hd .k{font-size:9px;letter-spacing:.24em;color:#e8c97a;font-weight:700}
+.hd h1{font-size:21px;font-weight:800;letter-spacing:.02em;margin-top:3px}
+.hd .r{text-align:right}
+.hd .p{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.hd .s{font-size:10.5px;opacity:.7;margin-top:3px;letter-spacing:.04em}
+
+.body{flex:1;padding:16px 36px 0;display:flex;flex-direction:column;gap:12px;min-height:0}
+.row{display:grid;gap:12px}
+.card{border:1px solid #e0e4ee;border-radius:10px;padding:10px 12px;background:#fff;min-width:0}
+.ct{font-size:8.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#6b7694;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.ct b{color:#0a1028;font-weight:800}
+.ct span{font-weight:600;letter-spacing:.04em;text-transform:none;display:flex;gap:10px}
+.ct span i{font-style:normal;display:inline-flex;align-items:center;gap:4px}
+.ct span i:before{content:"";width:7px;height:7px;border-radius:2px;background:var(--c)}
+.mt{font-size:10px;color:#8a93ad;padding:34px 0;text-align:center}
+
+.top{grid-template-columns:262px 1fr}
+.hero{border-radius:10px;padding:14px 16px;color:#fff;background:linear-gradient(150deg,#25356a 0%,#0a1028 85%);border:1px solid #c99f48;display:flex;flex-direction:column;justify-content:space-between}
+.hk{font-size:8.5px;letter-spacing:.18em;font-weight:800;color:#e8c97a}
+.hv{font-size:38px;font-weight:800;letter-spacing:-.035em;line-height:1;margin-top:6px;color:#8dffc0;font-variant-numeric:tabular-nums}
+.hv.neg{color:#ffb0a8}
+.hs{font-size:10.5px;opacity:.85;margin-top:6px}
+.tb{height:7px;border-radius:99px;background:rgba(255,255,255,.2);overflow:hidden;margin-top:12px}
+.tb i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#c99f48,#f6e0a2)}
+.ts{display:flex;justify-content:space-between;font-size:9.5px;opacity:.85;margin-top:5px;font-weight:600}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.tile{border:1px solid #e0e4ee;border-radius:10px;padding:10px 12px;background:#f8f9fc;display:flex;flex-direction:column;justify-content:space-between}
+.tl{font-size:8.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#6b7694}
+.tv{font-size:21px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums;margin-top:4px}
+.dl{font-size:9.5px;font-weight:700;margin-top:2px;min-height:12px;font-variant-numeric:tabular-nums}
+.dl em{font-style:normal;color:#8a93ad;font-weight:500}
+
+.mid{grid-template-columns:1fr 1fr 1fr}
+.dn{display:flex;flex-direction:column;align-items:center}
+.dn svg{margin-top:2px}
+.lg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;width:100%;margin-top:8px;text-align:center}
+.lg div{border-top:2px solid var(--c);padding-top:4px}
+.lg b{display:block;font-size:15px;font-weight:800}
+.lg span{font-size:8.5px;color:#6b7694;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+
+.low{grid-template-columns:1.35fr 1fr}
+.strip{display:grid;grid-template-columns:repeat(6,1fr);border:1px solid #e0e4ee;border-radius:10px;background:#f8f9fc}
+.gc{padding:10px 12px;display:flex;align-items:center;gap:9px;border-left:1px solid #e0e4ee;min-width:0}
+.gc:first-child{border-left:none}
+.gv{font-size:16px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.gl{font-size:8.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#6b7694}
+.gs{font-size:9px;color:#8a93ad;margin-top:1px}
+
+.ft{flex:none;height:46px;margin:0 36px;border-top:1px solid #e0e4ee;display:flex;align-items:center;justify-content:space-between;font-size:8.5px;color:#8a93ad;letter-spacing:.02em}
+.ft b{color:#c99f48;letter-spacing:.16em}
+
+@page{size:A4;margin:0}
+@media print{html,body{background:#fff;padding:0}.page{box-shadow:none;margin:0;width:210mm;height:297mm}}
+`;
+
+// ---------- 26-week activity grid ----------
 const GH_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-// Weeks run Sunday to Saturday and end on `endDate`, so every row lines up.
 function ghWeeks(entries, endDate, weeks = 26) {
-  const byDate = {};
-  entries.forEach((e) => { byDate[e.date] = e; });
-  const end = new Date(endDate);
-  end.setHours(0, 0, 0, 0);
-  const endPad = 6 - end.getDay();
-  const startOffset = (weeks - 1) * 7 + end.getDay();
-  const days = [];
-  for (let i = startOffset; i >= -endPad; i--) {
-    const d = new Date(end);
-    d.setDate(d.getDate() - i);
-    const key = todayKey(d);
-    days.push({ date: key, month: d.getMonth(), entry: byDate[key] || null, future: d > end });
-  }
-  const grid = [];
-  for (let i = 0; i < days.length; i += 7) grid.push(days.slice(i, i + 7));
-  return grid;
+const byDate = {};
+entries.forEach((e) => { byDate[e.date] = e; });
+const end = new Date(endDate);
+end.setHours(0, 0, 0, 0);
+const endPad = 6 - end.getDay();
+const startOffset = (weeks - 1) * 7 + end.getDay();
+const days = [];
+for (let i = startOffset; i >= -endPad; i--) {
+const d = new Date(end);
+d.setDate(d.getDate() - i);
+const key = todayKey(d);
+days.push({ date: key, month: d.getMonth(), entry: byDate[key] || null, future: d > end });
+}
+const grid = [];
+for (let i = 0; i < days.length; i += 7) grid.push(days.slice(i, i + 7));
+return grid;
 }
 
-// colours tuned for the report's light page
 function ghColor(day) {
-  if (day.future) return "#eef0f5";
-  if (!day.entry) return "#e3e7ef";
-  const n = day.entry.net || 0;
-  if (n > 0) return n > 300 ? "#1e8a3c" : n > 100 ? "#2fa24f" : "#56c46f";
-  if (n < 0) return n < -300 ? "#a3201c" : n < -100 ? "#c9342c" : "#e2665f";
-  return "#b9c0d3";
+if (day.future) return "#f1f3f8";
+if (!day.entry) return "#e6e9f1";
+const n = day.entry.net || 0;
+if (n > 0) return n > 300 ? "#117a3a" : n > 100 ? "#2fa24f" : "#6fcf88";
+if (n < 0) return n < -300 ? "#a3201c" : n < -100 ? "#d04a43" : "#e8847e";
+return "#b9c0d3";
 }
 
-function buildActivityHTML(entries, monthKey, fmt, money) {
-  const y = Number(monthKey.slice(0, 4));
-  const m = Number(monthKey.slice(5, 7)) - 1;
-  const today = new Date();
-  const isCurrent = monthKey === todayKey(today).slice(0, 7);
-  const endDate = isCurrent ? today : new Date(y, m + 1, 0);
-  const weeks = ghWeeks(entries, endDate, 26);
-
-  let green = 0, red = 0, total = 0, best = null;
-  weeks.forEach((w) => w.forEach((d) => {
-    if (!d.entry || d.future) return;
-    const n = d.entry.net || 0;
-    total += n;
-    if (n > 0) green++;
-    if (n < 0) red++;
-    if (best === null || n > best) best = n;
-  }));
-
-  const C = 11, G = 3, LEFT = 22, TOP = 16, step = C + G;
-  const W = LEFT + weeks.length * step;
-  const H = TOP + 7 * step;
-
-  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Trading activity, last 6 months">`;
-
-  [["M", 1], ["W", 3], ["F", 5]].forEach(([t, r]) => {
-    svg += `<text x="0" y="${TOP + r * step + 9}" font-size="8.5" font-weight="600" fill="#7a86a3">${t}</text>`;
-  });
-
-  weeks.forEach((w, wi) => {
-    const x = LEFT + wi * step;
-    if (wi === 0 || w[0].month !== weeks[wi - 1][0].month) {
-      svg += `<text x="${x}" y="10" font-size="9" font-weight="600" fill="#7a86a3">${GH_MONTHS[w[0].month]}</text>`;
-    }
-    w.forEach((d, di) => {
-      const inMonth = d.date.startsWith(monthKey);
-      const tip = d.entry ? `${d.date}: ${fmt(d.entry.net || 0)}` : d.date;
-      svg += `<rect x="${x}" y="${TOP + di * step}" width="${C}" height="${C}" rx="3" fill="${ghColor(d)}" opacity="${inMonth ? 1 : 0.55}"><title>${esc(tip)}</title></rect>`;
-    });
-  });
-  svg += "</svg>";
-
-  const tone = (v) => (v > 0 ? "pos" : v < 0 ? "neg" : "");
-  const stat = (v, l, c) => `<div><b class="${c || ""}">${v}</b><span>${l}</span></div>`;
-
-  return `
-
-## Trading activity last 6 months
-
-${stat(green, "Green days", "pos")}${stat(red, "Red days", "neg")}${stat(best === null ? "—" : fmt(best), "Best day", best === null ? "" : tone(best))}${stat(fmt(total), "6-month net", tone(total))}
-
-${svg}
-
-Loss********Win*Brighter cells are the month in this report*
-
-`;
-}
-
+// ---------- the one-page report ----------
 function buildReportHTML(o) {
-const { monthKey, stats, prev, monthDays, weekData, weekInsights, timeData, insights, currency, target, weekLabel, timeLabel, entries } = o;
+const { monthKey, stats, prev, monthDays, weekData, timeData, currency, target, entries, weekLabel } = o;
 const money = (n) => currency + Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
 const fmt = (n) => (n > 0 ? "+" : n < 0 ? "\u2212" : "") + money(n);
+const cmp = (n) => {
+const a = Math.abs(n);
+const s = a >= 1000 ? (a / 1000).toFixed(a >= 10000 ? 0 : 1) + "k" : String(Math.round(a));
+return (n < 0 ? "\u2212" : "") + currency + s;
+};
+const sg = (n) => (n > 0 ? "+" : "") + cmp(n);
 const pct = (v) => (v == null ? "\u2014" : Math.round(v) + "%");
 const pfx = (v) => (v == null ? "\u2014" : v === Infinity ? "\u221E" : v.toFixed(2));
+const tone = (v) => (v > 0 ? "pos" : v < 0 ? "neg" : "");
 const p = prev ? prev.s : null;
 const prevName = prev ? monthLabel(prev.key, true).split(" ")[0] : "";
 
-// up/down arrow vs previous month. inv = true when lower is better (drawdown)
-const delta = (cur, before, kind, inv) => {
-if (cur == null || before == null) return '\u2014';
+const dl = (cur, before, kind, inv) => {
+if (cur == null || before == null || !isFinite(cur - before)) return "<div class='dl'><em>no prior month</em></div>";
 const d = cur - before;
-if (!isFinite(d)) return '\u2014';
-if (Math.abs(d) < 0.005) return 'no change';
+if (Math.abs(d) < 0.005) return "<div class='dl'><em>no change</em></div>";
 const good = inv ? d < 0 : d > 0;
-const txt = kind === "money" ? money(d) : kind === "pts" ? Math.abs(Math.round(d)) + " pts" : Math.abs(d).toFixed(2);
-return `<span class="dl ${good ? "up" : "dn"}">${d > 0 ? "\u25B2" : "\u25BC"} ${txt}</span>`;
+const t = kind === "money" ? money(d) : kind === "pts" ? Math.abs(Math.round(d)) + " pts" : Math.abs(d).toFixed(2);
+return `<div class="dl ${good ? "pos" : "neg"}">${d > 0 ? "\u25B2" : "\u25BC"} ${t} <em>vs ${esc(prevName)}</em></div>`;
 };
 
-const metrics = [
-{ l: "Net P&L", s: "closed trades, month total", v: fmt(stats.net), c: stats.net > 0 ? "pos" : stats.net < 0 ? "neg" : "", d: delta(stats.net, p && p.net, "money") },
-{ l: "Win rate", s: `${stats.wins}W \u00B7 ${stats.losses}L \u00B7 ${stats.be}BE`, v: pct(stats.winRate), d: delta(stats.winRate, p && p.winRate, "pts") },
-{ l: "Profit factor", s: "gross win \u00F7 gross loss", v: pfx(stats.pf), d: delta(stats.pf, p && p.pf, "num") },
-{ l: "Expectancy", s: "average per trade", v: stats.expectancy == null ? "\u2014" : fmt(stats.expectancy), d: delta(stats.expectancy, p && p.expectancy, "money") },
-{ l: "Green days", s: `${stats.green} of ${stats.n} days`, v: pct(stats.greenRate), d: delta(stats.greenRate, p && p.greenRate, "pts") },
-{ l: "Max drawdown", s: "peak to trough, daily", v: stats.maxDD > 0 ? "\u2212" + money(stats.maxDD) : money(0), c: stats.maxDD > 0 ? "neg" : "", d: delta(stats.maxDD, p && p.maxDD, "money", true) },
-];
-const metricsHtml = metrics
-.map((m) => `<div class="mr"><div><div class="ml">${m.l}</div><div class="ms">${m.s}</div></div><div class="mv"><b class="${m.c || ""}">${m.v}</b>${m.d}</div></div>`)
-.join("");
+const tp = target > 0 ? Math.max(0, Math.min(100, (stats.net / target) * 100)) : 0;
+const heroVs = prev
+? `<div class="hs">${stats.net >= p.net ? "\u25B2" : "\u25BC"} ${money(stats.net - p.net)} vs ${esc(prevName)}</div>`
+: "<div class='hs'>No prior month</div>";
+const heroBar = target > 0
+? `<div><div class="tb"><i style="width:${tp}%"></i></div><div class="ts"><span>${Math.round(tp)}% of target</span><span>${money(target)}</span></div></div>`
+: "";
 
-// daily bars
-const dailySvg = (() => {
-const W = 340, H = 190, PX = 8, PT = 14, PB = 26;
+const tiles = [
+{ l: "Win rate", v: pct(stats.winRate), c: stats.winRate == null ? "" : stats.winRate >= 50 ? "pos" : "neg", d: dl(stats.winRate, p && p.winRate, "pts") },
+{ l: "Profit factor", v: pfx(stats.pf), c: stats.pf == null ? "" : stats.pf >= 1 ? "pos" : "neg", d: dl(stats.pf, p && p.pf, "num") },
+{ l: "Expectancy", v: stats.expectancy == null ? "\u2014" : fmt(stats.expectancy), c: tone(stats.expectancy || 0), d: dl(stats.expectancy, p && p.expectancy, "money") },
+{ l: "Max drawdown", v: stats.maxDD > 0 ? "\u2212" + money(stats.maxDD) : money(0), c: stats.maxDD > 0 ? "neg" : "", d: dl(stats.maxDD, p && p.maxDD, "money", true) },
+{ l: "Trades", v: String(stats.trades), c: "", d: `<div class="dl"><em>${stats.tradesPerDay == null ? "&nbsp;" : stats.tradesPerDay.toFixed(1) + " per day"}</em></div>` },
+{ l: "Green streak", v: stats.bestStreak + (stats.bestStreak === 1 ? " day" : " days"), c: stats.bestStreak > 0 ? "pos" : "", d: `<div class="dl"><em>${stats.green} of ${stats.n} green</em></div>` },
+].map((t) => `<div class="tile"><div class="tl">${t.l}</div><div class="tv ${t.c || ""}">${t.v}</div>${t.d}</div>`).join("");
+
+const candles = (() => {
+const days = monthDays.slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+const n = days.length;
+if (!n) return "";
+const W = 698, H = 150, PL = 46, PR = 10, PT = 10, PB = 20;
+let cum = 0;
+const cs = days.map((d) => {
+const open = cum;
+let hi = open, lo = open, run = open;
+if (Array.isArray(d.trades)) d.trades.forEach((t) => { run += t.v; hi = Math.max(hi, run); lo = Math.min(lo, run); });
+cum = open + (d.net || 0);
+return { d, open, close: cum, hi: Math.max(hi, open, cum), lo: Math.min(lo, open, cum) };
+});
+const vals = [0];
+cs.forEach((c) => vals.push(c.hi, c.lo));
+let min = Math.min(...vals), max = Math.max(...vals);
+if (max === min) { max += 1; min -= 1; }
+const padV = (max - min) * 0.08;
+min -= padV; max += padV;
+const y = (v) => PT + (1 - (v - min) / (max - min)) * (H - PT - PB);
+const slot = (W - PL - PR) / n;
+const bw = Math.min(16, slot * 0.58);
+const step = Math.ceil(n / 14);
+let s = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+for (let i = 0; i <= 4; i++) {
+const v = min + ((max - min) * i) / 4;
+const yy = y(v);
+s += `<line x1="${PL}" x2="${W - PR}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}" stroke="#e9ecf3"/><text x="${PL - 6}" y="${(yy + 3).toFixed(1)}" text-anchor="end" font-size="8.5" font-weight="600" fill="#8a93ad">${cmp(v)}</text>`;
+}
+s += `<line x1="${PL}" x2="${W - PR}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}" stroke="#9aa4bd" stroke-dasharray="3 3"/>`;
+const pts = cs.map((c, i) => `${(PL + i * slot + slot / 2).toFixed(1)},${y(c.close).toFixed(1)}`).join(" ");
+s += `<polyline points="${pts}" fill="none" stroke="#c99f48" stroke-width="1.4" opacity=".85"/>`;
+cs.forEach((c, i) => {
+const cx = PL + i * slot + slot / 2;
+const col = c.close >= c.open ? "#14925f" : "#d64545";
+const top = y(Math.max(c.open, c.close)), bot = y(Math.min(c.open, c.close));
+s += `<line x1="${cx.toFixed(1)}" x2="${cx.toFixed(1)}" y1="${y(c.hi).toFixed(1)}" y2="${y(c.lo).toFixed(1)}" stroke="${col}" stroke-width="1.3"/>`;
+s += `<rect x="${(cx - bw / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(2, bot - top).toFixed(1)}" rx="1.5" fill="${col}"/>`;
+if (i % step === 0) s += `<text x="${cx.toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="8" font-weight="600" fill="#8a93ad">${Number(c.d.date.slice(8, 10))}</text>`;
+});
+return s + "</svg>";
+})();
+
+const donut = (() => {
+const w = stats.wins, l = stats.losses, b = stats.be, t = w + l + b;
+const r = 38, c = 2 * Math.PI * r;
+let off = 0;
+let s = `<svg viewBox="0 0 100 100" width="104" height="104"><circle cx="50" cy="50" r="${r}" fill="none" stroke="#eceff5" stroke-width="12"/>`;
+[[w, "#14925f"], [l, "#d64545"], [b, "#e2a93b"]].forEach(([v, col]) => {
+if (!v || !t) return;
+const len = (v / t) * c;
+s += `<circle cx="50" cy="50" r="${r}" fill="none" stroke="${col}" stroke-width="12" stroke-dasharray="${len.toFixed(2)} ${(c - len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 50 50)"/>`;
+off += len;
+});
+s += `<text x="50" y="49" text-anchor="middle" font-size="17" font-weight="800" fill="#0a1028">${pct(stats.winRate)}</text><text x="50" y="61" text-anchor="middle" font-size="6.5" font-weight="700" fill="#8a93ad" letter-spacing=".8">WIN RATE</text></svg>`;
+return s;
+})();
+
+const daily = (() => {
+const W = 208, H = 122, PX = 4, PT = 8, PB = 16;
 const total = new Date(Number(monthKey.slice(0, 4)), Number(monthKey.slice(5, 7)), 0).getDate();
 const byDay = {};
 monthDays.forEach((d) => { byDay[Number(d.date.slice(8, 10))] = d.net || 0; });
 const nets = Object.values(byDay);
 const maxPos = Math.max(0, ...nets), maxNeg = Math.max(0, ...nets.map((v) => -v));
-const range = maxPos + maxNeg || 1, plotH = H - PT - PB, k = plotH / range, zeroY = PT + plotH * (maxPos / range);
-const slot = (W - 2 * PX) / total, bw = Math.max(3, slot * 0.6);
-let s = `<svg viewBox="0 0 ${W} ${H}" width="100%"><line x1="${PX}" x2="${W - PX}" y1="${zeroY}" y2="${zeroY}" stroke="#c4cada" stroke-dasharray="3 4"/>`;
+const range = maxPos + maxNeg || 1;
+const plotH = H - PT - PB, k = plotH / range, zeroY = PT + plotH * (maxPos / range);
+const slot = (W - 2 * PX) / total, bw = Math.max(3, slot * 0.64);
+let s = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+s += `<line x1="${PX}" x2="${W - PX}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}" stroke="#9aa4bd"/>`;
 for (let day = 1; day <= total; day++) {
 const v = byDay[day], cx = PX + (day - 1) * slot + slot / 2;
 if (v !== undefined) {
 const h = Math.max(2, Math.abs(v) * k);
-s += `<rect x="${(cx - bw / 2).toFixed(1)}" y="${(v >= 0 ? zeroY - h : zeroY).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${v >= 0 ? "#1f9d6b" : "#d9534f"}"/>`;
+s += `<rect x="${(cx - bw / 2).toFixed(1)}" y="${(v >= 0 ? zeroY - h : zeroY).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" fill="${v >= 0 ? "#14925f" : "#d64545"}"/>`;
 }
-if (day === 1 || day % 5 === 0) s += `<text x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="9" font-weight="600" fill="#7a86a3">${day}</text>`;
+if (day === 1 || day % 5 === 0) s += `<text x="${cx.toFixed(1)}" y="${H - 4}" text-anchor="middle" font-size="7.5" font-weight="600" fill="#8a93ad">${day}</text>`;
+}
+if (stats.n > 0) {
+const ay = zeroY - (stats.net / stats.n) * k;
+s += `<line x1="${PX}" x2="${W - PX}" y1="${ay.toFixed(1)}" y2="${ay.toFixed(1)}" stroke="#c99f48" stroke-dasharray="4 3" stroke-width="1.3"/><text x="${W - PX}" y="${(ay - 3).toFixed(1)}" text-anchor="end" font-size="7.5" font-weight="800" fill="#b08a2e">avg ${sg(stats.net / stats.n)}</text>`;
 }
 return s + "";
 })();
 
-// equity curve
-const equitySvg = (() => {
-const W = 700, H = 150, PX = 10, PT = 12, PB = 12;
-const pts = [0, ...stats.curve.map((c) => c.cum)];
-const min = Math.min(0, ...pts), max = Math.max(0, ...pts), range = max - min || 1;
-const x = (i) => PX + (i / (pts.length - 1)) * (W - 2 * PX);
-const y = (v) => PT + (1 - (v - min) / range) * (H - PT - PB);
-const line = pts.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
-const area = `${line} L${x(pts.length - 1).toFixed(1)} ${y(0).toFixed(1)} L${x(0).toFixed(1)} ${y(0).toFixed(1)} Z`;
-const col = pts[pts.length - 1] >= 0 ? "#1f9d6b" : "#d9534f";
-return `<svg viewBox="0 0 ${W} ${H}" width="100%"><line x1="${PX}" x2="${W - PX}" y1="${y(0)}" y2="${y(0)}" stroke="#c4cada" stroke-dasharray="3 4"/><path d="${area}" fill="${col}" opacity=".14"/><path d="${line}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+const weeksSvg = (() => {
+const rows = weekData.rows;
+const W = 208, H = 122, PT = 16, PB = 26;
+const maxPos = Math.max(0, ...rows.map((r) => r.net)), maxNeg = Math.max(0, ...rows.map((r) => -r.net));
+const range = maxPos + maxNeg || 1;
+const plotTop = PT + (maxPos > 0 ? 8 : 0), plotBottom = H - PB - (maxNeg > 0 ? 8 : 0);
+const k = (plotBottom - plotTop) / range, zeroY = plotTop + (plotBottom - plotTop) * (maxPos / range);
+const slot = W / rows.length, bw = 26;
+let s = `<svg viewBox="0 0 ${W} ${H}" width="100%"><line x1="4" x2="${W - 4}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}" stroke="#9aa4bd"/>`;
+rows.forEach((r, i) => {
+const cx = i * slot + slot / 2;
+const up = r.net >= 0;
+const isBest = weekData.best && weekData.best.id === r.id;
+if (r.n > 0) {
+const h = Math.max(3, Math.abs(r.net) * k), yy = up ? zeroY - h : zeroY;
+s += `<rect x="${(cx - bw / 2).toFixed(1)}" y="${yy.toFixed(1)}" width="${bw}" height="${h.toFixed(1)}" rx="4" fill="${up ? "#14925f" : "#d64545"}"${isBest ? ' stroke="#c99f48" stroke-width="2"' : ""}/>`;
+s += `<text x="${cx.toFixed(1)}" y="${(up ? yy - 4 : yy + h + 10).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="800" fill="${up ? "#14925f" : "#d64545"}">${sg(r.net)}</text>`;
+}
+s += `<text x="${cx.toFixed(1)}" y="${H - 12}" text-anchor="middle" font-size="9" font-weight="800" fill="#10193a">W${i + 1}</text><text x="${cx.toFixed(1)}" y="${H - 3}" text-anchor="middle" font-size="7" font-weight="600" fill="#8a93ad">${r.span}</text>`;
+});
+return s + "";
 })();
 
-// week of the month
-const weeksHtml = weekData.active > 0
-? `<div class="sec"><h2>Week of the month <small style="font-size:11px;letter-spacing:0;color:#7a86a3;text-transform:none;font-weight:500">${esc(weekLabel)}</small></h2><div class="wks">${weekData.rows.map((r) => {         const best = weekData.best && weekData.best.id === r.id, worst = weekData.worst && weekData.worst.id === r.id;         return `<div class="wk${best ? " best" : worst ? " worst" : ""}">
+const heat = (() => {
+const y0 = Number(monthKey.slice(0, 4)), m0 = Number(monthKey.slice(5, 7)) - 1;
+const now = new Date();
+const end = monthKey === todayKey(now).slice(0, 7) ? now : new Date(y0, m0 + 1, 0);
+const weeks = ghWeeks(entries || [], end, 26);
+let green = 0, red = 0;
+const C = 11, G = 3, LEFT = 20, TOP = 16, step = C + G;
+const W = LEFT + weeks.length * step, H = TOP + 7 * step;
+let s = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+[["M", 1], ["W", 3], ["F", 5]].forEach(([t, r]) => {
+s += `<text x="0" y="${TOP + r * step + 9}" font-size="8" font-weight="600" fill="#8a93ad">${t}</text>`;
+});
+weeks.forEach((w, wi) => {
+const x = LEFT + wi * step;
+if (wi === 0 || w[0].month !== weeks[wi - 1][0].month) s += `<text x="${x}" y="10" font-size="8.5" font-weight="600" fill="#8a93ad">${GH_MONTHS[w[0].month]}</text>`;
+w.forEach((d, di) => {
+if (d.entry && !d.future) { if ((d.entry.net || 0) > 0) green++; else if ((d.entry.net || 0) < 0) red++; }
+const inMonth = d.date.startsWith(monthKey);
+s += `<rect x="${x}" y="${TOP + di * step}" width="${C}" height="${C}" rx="3" fill="${ghColor(d)}" opacity="${inMonth ? 1 : 0.6}"/>`;
+});
+});
+return { svg: s + "", green, red };
+})();
 
-${r.label}${best ? 'Best' : worst ? 'Worst' : ""}
-Days ${r.span}
-<div class="v ${r.net > 0 ? "pos" : r.net < 0 ? "neg" : ""}">${r.n ? fmt(r.net) : "\u2014"}Win rate**${pct(r.s.winRate)}**
-Avg / day**${r.avgDay == null ? "\u2014" : fmt(r.avgDay)}**
-Days**${r.n}**
-`;       }).join("")}</div></div>`
-: "";
+const blocksSvg = (() => {
+if (!timeData.counted) return "<div class='mt'>No timed trades yet</div>";
+const W = 278, rowH = 22, L = 52, R = 56;
+const cx = L + (W - L - R) / 2, half = (W - L - R) / 2 - 2;
+const mx = Math.max(1, ...timeData.blocks.map((b) => Math.abs(b.net)));
+let s = `<svg viewBox="0 0 ${W} ${timeData.blocks.length * rowH + 4}" width="100%"><line x1="${cx}" x2="${cx}" y1="0" y2="${timeData.blocks.length * rowH + 4}" stroke="#c4cada"/>`;
+timeData.blocks.forEach((b, i) => {
+const y = i * rowH + 3;
+s += `<text x="0" y="${y + 13}" font-size="8.5" font-weight="700" fill="#10193a">${esc(b.short)}</text>`;
+if (b.trades) {
+const w = (Math.abs(b.net) / mx) * half;
+s += `<rect x="${(b.net >= 0 ? cx : cx - w).toFixed(1)}" y="${y + 3}" width="${Math.max(2, w).toFixed(1)}" height="11" rx="3" fill="${b.net >= 0 ? "#14925f" : "#d64545"}"/>`;
+s += `<text x="${W}" y="${y + 13}" text-anchor="end" font-size="9" font-weight="800" fill="${b.net >= 0 ? "#14925f" : "#d64545"}">${sg(b.net)}</text>`;
+} else {
+s += `<text x="${W}" y="${y + 13}" text-anchor="end" font-size="9" fill="#9aa4bd">—</text>`;
+}
+});
+return s + "";
+})();
 
-// trading blocks
-const blockMax = Math.max(1, ...timeData.blocks.map((b) => Math.abs(b.net)));
-const timesHtml = timeData.counted > 0
-? `<div class="sec"><h2>Best &amp; worst times <small style="font-size:11px;letter-spacing:0;color:#7a86a3;text-transform:none;font-weight:500">${esc(timeLabel)}</small></h2>${timeData.blocks.map((b) => {         const w = (Math.abs(b.net) / blockMax) * 50;         const wr = b.wins + b.losses > 0 ? Math.round((b.wins / (b.wins + b.losses)) * 100) + "%" : "\u2014";         const bar = b.trades ? `<i style="${b.net >= 0 ? "left:50%" : "right:50%"};width:${w}%;background:${b.net >= 0 ? "#1f9d6b" : "#d9534f"}">`: "";         return`
+const gauge = (v, col) => {
+const r = 15, c = 2 * Math.PI * r, f = v == null ? 0 : Math.max(0, Math.min(100, v)) / 100;
+return `<svg viewBox="0 0 40 40" width="38" height="38" style="flex:none"><circle cx="20" cy="20" r="${r}" fill="none" stroke="#e3e7f0" stroke-width="5"/><circle cx="20" cy="20" r="${r}" fill="none" stroke="${col}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${(c * f).toFixed(2)} ${c.toFixed(2)}" transform="rotate(-90 20 20)"/></svg>`;
+};
+const gcell = (v, col, label) => `<div class="gc">${gauge(v, col)}<div><div class="gv">${pct(v)}</div><div class="gl">${label}</div></div></div>`;
+const dshort = (d) => new Date(d + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+const tcell = (label, val, c, sub) => `<div class="gc"><div><div class="gl">${label}</div><div class="gv ${c || ""}">${val}</div><div class="gs">${sub || "&nbsp;"}</div></div></div>`;
+const strip =
+gcell(stats.greenRate, "#14925f", "Green days") +
+gcell(stats.onTimeRate, "#25356a", "On-time stops") +
+gcell(stats.floorRate, "#c99f48", "Floor held") +
+tcell("Payoff ratio", stats.payoff == null ? "—" : stats.payoff.toFixed(2), "", stats.avgWin != null && stats.avgLoss != null ? `${cmp(stats.avgWin)} / ${cmp(stats.avgLoss)}` : "") +
+tcell("Best day", stats.bestDay ? sg(stats.bestDay.net) : "—", stats.bestDay ? tone(stats.bestDay.net) : "", stats.bestDay ? dshort(stats.bestDay.date) : "") +
+tcell("Worst day", stats.worstDay ? sg(stats.worstDay.net) : "—", stats.worstDay ? tone(stats.worstDay.net) : "", stats.worstDay ? dshort(stats.worstDay.date) : "");
 
-**${b.short}**${b.t}
-${bar}
-<div class="bv ${b.net > 0 ? "pos" : b.net < 0 ? "neg" : ""}">${b.trades ? fmt(b.net) : "\u2014"}${b.trades ? b.trades + " trades \u00B7 " + wr : "no trades"}
-`;       }).join("")}</div>`
-: "";
+const generated = new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 
-// top days (like "Most popular this week")
-const sfx = ["ST", "ND", "RD", "TH", "TH"];
-const topDays = monthDays.slice().sort((a, b) => (b.net || 0) - (a.net || 0)).slice(0, 5);
-const topHtml = topDays.length
-? `<div class="sec"><h2>Top days this month</h2><div class="top">${topDays.map((d, i) => {         const share = stats.net > 0 && (d.net || 0) > 0 ? Math.round(((d.net || 0) / stats.net) * 100) + "% of month" : "";         const dt = new Date(d.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });         return `
+return `<title>Trading performance ${esc(monthLabel(monthKey))}</title><style>${REPORT_CSS}</style>
+<div class="page">
+  <div class="hd">
+    <div class="l">
+      <div class="mark">⎈</div>
+      <div>
+        <div class="k">THE SESSION</div>
+        <h1>${esc(monthLabel(monthKey))}</h1>
+      </div>
+    </div>
+    <div class="r">
+      <div class="p">${fmt(stats.net)}</div>
+      <div class="s">${stats.n} trading ${stats.n === 1 ? "day" : "days"}</div>
+    </div>
+  </div>
 
-${i + 1}${sfx[i]}
-${dt}
-<div class="nv ${(d.net || 0) > 0 ? "pos" : (d.net || 0) < 0 ? "neg" : ""}">${fmt(d.net || 0)}
-${d.wins || 0}W \u00B7 ${d.losses || 0}L \u00B7 ${d.breakeven || 0}BE
-${share}
-${d.note ? `<div class="nt">\u201C${esc(d.note).slice(0, 90)}\u201D</div>` : ""}`;       }).join("")}</div></div>`
-: "";
+  <div class="body">
+    <div class="row top">
+      <div class="hero">
+        <div class="hk">MONTHLY RESULT</div>
+        <div class="hv ${stats.net >= 0 ? "" : "neg"}">${fmt(stats.net)}</div>
+        ${heroVs}
+        ${heroBar}
+      </div>
+      <div class="tiles">${tiles}</div>
+    </div>
 
-const notes = [...insights, ...weekInsights].filter((x) => x.tone !== "note");
-const insHtml = notes.length
-? `<div class="sec"><h2>What stands out</h2>${notes.map((x) => `
+    <div class="row card">
+      <div class="ct"><b>Equity · daily candles</b><span style="--c:#14925f"><i>Up day</i><i style="--c:#d64545">Down day</i><i style="--c:#c99f48">Closing equity</i></span></div>
+      ${candles}
+    </div>
 
-${esc(x.text)}
-`).join("")}</div>`
-: "";
+    <div class="row mid">
+      <div class="card"><div class="ct"><b>Trade outcomes</b></div>
+        <div class="dn">${donut}<div class="lg"><div style="--c:#14925f"><b>${stats.wins}</b><span>Wins</span></div><div style="--c:#d64545"><b>${stats.losses}</b><span>Losses</span></div><div style="--c:#e2a93b"><b>${stats.be}</b><span>Even</span></div></div></div>
+      </div>
+      <div class="card"><div class="ct"><b>Daily P&amp;L</b></div>${daily}</div>
+      <div class="card"><div class="ct"><b>Week of month</b><span>${esc(weekLabel || "")}</span></div>${weekData.active ? weeksSvg : '<div class="mt">No data yet</div>'}</div>
+    </div>
 
-const activityHtml = buildActivityHTML(entries || [], monthKey, fmt, money);
-const tp = target > 0 ? Math.max(0, Math.min(100, (stats.net / target) * 100)) : 0;
-const heroRight = target > 0
-? `<div class="tw"><div class="tbar"><i style="width:${tp}%"></i></div><div class="tsub">${Math.round(tp)}% of ${money(target)} target</div></div>`
-: "";
-const vs = prev ? `<div class="of">${stats.net >= p.net ? "\u25B2" : "\u25BC"} ${money(stats.net - p.net)} vs ${esc(prevName)}</div>` : "";
+    <div class="row low">
+      <div class="card"><div class="ct"><b>Activity · 26 weeks</b><span><span class="pos">${heat.green} green</span><span class="neg">${heat.red} red</span></span></div>${heat.svg}</div>
+      <div class="card"><div class="ct"><b>P&amp;L by trading block</b></div>${blocksSvg}</div>
+    </div>
 
-return `<title>Performance report ${esc(monthLabel(monthKey))}</title><style>${REPORT_CSS}</style>
+    <div class="strip">${strip}</div>
+  </div>
 
-*\u25B2*PERFORMANCE REPORT
-${esc(monthLabel(monthKey, true))}
-
-**The Session**
-Trading journal \u00B7 ${stats.n} trading ${stats.n === 1 ? "day" : "days"} \u00B7 ${stats.trades} trades
-${esc(monthLabel(monthKey))}
-
-Net result
-${fmt(stats.net)}
-${vs}
-${heroRight}
-
-## Key metrics
-${metricsHtml}
-
-## Month at a glance
-${dailySvg}
-
-## Equity curve
-${equitySvg}
-
-${activityHtml}
-${weeksHtml}${timesHtml}${topHtml}${insHtml}
-**THE SESSION**
-Win rate = wins \u00F7 (wins + losses). Trades within \u00B1${money(BE_LIMIT)} count as break-even.
-Generated ${new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
-
+  <div class="ft"><span>Generated ${generated}</span><b>THE SESSION</b></div>
+</div>
 `;
 }
 function downloadHTML(html, filename) {
@@ -541,10 +659,10 @@ a.remove();
 setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
-// opens the print dialog on a hidden frame, so the user can pick "Save as PDF"
+// prints on a hidden A4-sized frame so the page lays out as one sheet
 function printHTML(html) {
 const f = document.createElement("iframe");
-f.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+f.style.cssText = "position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0;";
 document.body.appendChild(f);
 const doc = f.contentWindow.document;
 doc.open();
@@ -554,7 +672,7 @@ setTimeout(() => {
 f.contentWindow.focus();
 f.contentWindow.print();
 setTimeout(() => f.remove(), 2500);
-}, 600);
+}, 900);
 }
 
 // ---------- presentational pieces ----------
