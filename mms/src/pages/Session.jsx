@@ -151,12 +151,16 @@ function firstWeekday(y, m) { return new Date(y, m, 1).getDay(); } // 0 = Sun
 function ymd(y, m, day) { return `${y}-${pad(m + 1)}-${pad(day)}`; }
 
 function buildMonthGrid(y, m) {
+  // Monday-first, Mon–Fri only: 5 cells per row
   const total = daysInMonth(y, m);
-  const startDow = firstWeekday(y, m);
   const cells = [];
-  for (let i = 0; i < startDow; i++) cells.push(null);
-  for (let day = 1; day <= total; day++) cells.push(ymd(y, m, day));
-  while (cells.length % 7 !== 0) cells.push(null);
+  for (let day = 1; day <= total; day++) {
+    const dow = new Date(y, m, day).getDay(); // 0 = Sun, 6 = Sat
+    if (dow === 0 || dow === 6) continue;
+    if (cells.length === 0) for (let i = 1; i < dow; i++) cells.push(null); // pad before the 1st weekday
+    cells.push(ymd(y, m, day));
+  }
+  while (cells.length % 5 !== 0) cells.push(null);
   return cells;
 }
 
@@ -484,7 +488,14 @@ function FocusCard({
   );
 }
 
-function NextUpCard({ nextBlock, minsUntil }) {
+function NextUpCard({ nextBlock, minsUntil, weekend }) {
+  if (weekend) {
+    return (
+      <div className="ts-glass" style={{ borderRadius: "26px", padding: "18px", marginBottom: "10px", textAlign: "center", color: "var(--muted)" }}>
+        Weekend. No trading. Cool off, review your week's mistakes and prepare for Monday.
+      </div>
+    );
+  }
   if (!nextBlock) {
     return (
       <div className="ts-glass" style={{ borderRadius: "26px", padding: "18px", marginBottom: "10px", textAlign: "center", color: "var(--muted)" }}>
@@ -1210,9 +1221,11 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
   );
   const fmt = useCallback((n) => (n > 0 ? "+" : n < 0 ? "\u2212" : "") + money(n), [money]);
 
+  const weekend = !isWeekday(todayKey());
   const nowMin = now.getHours() * 60 + now.getMinutes();
 
   const currentNowId = useMemo(() => {
+    if (weekend) return null; // no live block on Sat/Sun
     for (const b of ALL_BLOCKS) {
       const isNow =
         b.end > b.start
@@ -1221,7 +1234,7 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
       if (isNow) return b.id;
     }
     return null;
-  }, [nowMin]);
+  }, [nowMin, weekend]);
 
   const liveHighImpact = useMemo(() => {
     return (
@@ -1234,6 +1247,13 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
   }, [todaysNews, nowMin]);
 
   const stopband = useMemo(() => {
+    if (weekend) {
+      return {
+        limit: false,
+        head: "Weekend — markets closed",
+        sub: "Cool off, review the week's mistakes and prepare for Monday.",
+      };
+    }
     if (netPnl <= -maxLoss) {
       return {
         limit: true,
@@ -1262,7 +1282,7 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
       };
     }
     return { limit: false, head: "Session closed for today", sub: `Closed at ${fmt(netPnl)}. Log the day and step away.` };
-  }, [netPnl, maxLoss, liveHighImpact, nowMin, fmt, money]);
+  }, [netPnl, maxLoss, liveHighImpact, nowMin, fmt, money, weekend]);
 
   const wins = day.pnl.filter((v) => v >= BE_LIMIT).length;
   const losses = day.pnl.filter((v) => v <= -BE_LIMIT).length;
@@ -1352,8 +1372,8 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
     [currentNowId]
   );
   const nextBlock = useMemo(
-    () => ALL_BLOCKS.filter((b) => b.start > nowMin).sort((a, b) => a.start - b.start)[0] || null,
-    [nowMin]
+    () => (weekend ? null : ALL_BLOCKS.filter((b) => b.start > nowMin).sort((a, b) => a.start - b.start)[0] || null),
+    [nowMin, weekend]
   );
 
   // ---------- news alert popup (fires when an event is within 30 min) ----------
@@ -1451,6 +1471,7 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
 
   // ---------- handlers ----------
   const toggleCheck = (id) => {
+    if (weekend) return;
     setDay((d) => ({ ...d, checks: { ...d.checks, [id]: !d.checks[id] } }));
   };
 
@@ -1492,6 +1513,7 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
   };
 
   const addResult = () => {
+    if (weekend) return;
     const v = parseFloat(pnlInput);
     if (isNaN(v) || v === 0) { pnlInputRef.current?.focus(); return; }
     const stamp = new Date();
@@ -1571,6 +1593,11 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
   };
 
   const saveLog = () => {
+    if (weekend) {
+      setSavedMsg("Weekends aren't logged. Rest up.");
+      setTimeout(() => setSavedMsg(""), 3500);
+      return;
+    }
     commitEntry(buildEntry());
     const ok = writeImage(todayKey(), logImage);
     setImgTick((t) => t + 1);
@@ -1815,12 +1842,13 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
                 ref={pnlInputRef}
                 type="number"
                 step="0.01"
-                placeholder="P&L"
+                placeholder={weekend ? "Weekend" : "P&L"}
+                disabled={weekend}
                 value={pnlInput}
                 onChange={(e) => setPnlInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addResult(); } }}
               />
-              <button onClick={addResult}>Log result</button>
+              <button onClick={addResult} disabled={weekend} style={weekend ? { opacity: 0.4 } : undefined}>Log result</button>
             </div>
             <div className="pnl-meter">
               <div className={`pnl-meter-fill${usedFraction >= 0.66 ? " danger" : ""}`} style={{ width: (usedFraction * 100).toFixed(1) + "%" }} />
@@ -2044,7 +2072,7 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
               usedFraction={usedFraction}
             />
           ) : (
-            <NextUpCard key="nextup" nextBlock={nextBlock} minsUntil={nextBlock ? nextBlock.start - nowMin : 0} />
+            <NextUpCard key="nextup" nextBlock={nextBlock} minsUntil={nextBlock ? nextBlock.start - nowMin : 0} weekend={weekend} />
           )
         ) : (
           <>
@@ -2161,11 +2189,11 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
               <button onClick={goNextMonth} className="ts-cal-nav" aria-label="Next month">›</button>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "6px", fontSize: "10.5px", fontWeight: 600, color: "var(--muted)", marginBottom: "8px", textAlign: "center" }}>
-              {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i}>{d}</div>)}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "6px", fontSize: "10.5px", fontWeight: 600, color: "var(--muted)", marginBottom: "8px", textAlign: "center" }}>
+              {["M", "T", "W", "T", "F"].map((d, i) => <div key={i}>{d}</div>)}
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "6px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "6px" }}>
               {monthGrid.map((date, i) => {
                 if (!date) return <div key={i} style={{ aspectRatio: "1" }} />;
                 const entry = historyByDate[date];

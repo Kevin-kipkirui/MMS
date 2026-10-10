@@ -99,7 +99,7 @@ function loadData() {
   }
 
   const entries = Object.values(map)
-    .filter(isActive)
+    .filter((e) => isWeekday(e.date) && isActive(e))
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
   return {
@@ -780,20 +780,28 @@ function DailyBars({ days, monthKey, fmt }) {
   const W = 480, H = 150, PX = 10, PT = 10, PB = 22;
   const y0 = Number(monthKey.slice(0, 4)), m0 = Number(monthKey.slice(5, 7));
   const total = new Date(y0, m0, 0).getDate();
+
+  // weekdays only
+  const cols = [];
+  for (let d = 1; d <= total; d++) {
+    const dow = new Date(y0, m0 - 1, d).getDay();
+    if (dow !== 0 && dow !== 6) cols.push(d);
+  }
+
   const byDay = {};
   days.forEach((d) => { byDay[Number(d.date.slice(8, 10))] = d.net || 0; });
   const nets = Object.values(byDay);
   const maxPos = Math.max(0, ...nets), maxNeg = Math.max(0, ...nets.map((v) => -v));
   const range = maxPos + maxNeg || 1;
   const plotH = H - PT - PB, k = plotH / range, zeroY = PT + plotH * (maxPos / range);
-  const slot = (W - 2 * PX) / total, bw = Math.max(3, slot * 0.62);
+  const slot = (W - 2 * PX) / cols.length, bw = Math.max(3, Math.min(18, slot * 0.62));
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Daily profit and loss" style={{ display: "block" }}>
       <line x1={PX} x2={W - PX} y1={zeroY} y2={zeroY} style={{ stroke: "var(--border)" }} strokeDasharray="3 4" />
-      {Array.from({ length: total }, (_, i) => {
-        const day = i + 1, v = byDay[day];
+      {cols.map((day, i) => {
+        const v = byDay[day];
         const cx = PX + i * slot + slot / 2;
-        const showLabel = day === 1 || day % 5 === 0;
+        const showLabel = i % 5 === 0; // label every Monday
         return (
           <g key={day}>
             {v !== undefined && (
@@ -903,20 +911,8 @@ export default function Performance({ onBack } = {}) {
   const [scope, setScope] = useState("all"); // "all" | "month" (for the time analysis)
   const [weekScope, setWeekScope] = useState("year"); // "year" | "all" (for week-of-month)
   const [theme, setTheme] = useState(readTheme);
-  const [reportOpen, setReportOpen] = useState(false);
   const [periodId, setPeriodId] = useState("month");
   const [custom, setCustom] = useState({ from: "", to: "" });
-
-  useEffect(() => {
-    if (!reportOpen) return;
-    const close = (e) => { if (!e.target.closest(".pf-dl-wrap")) setReportOpen(false); };
-    document.addEventListener("mousedown", close);
-    document.addEventListener("touchstart", close);
-    return () => {
-      document.removeEventListener("mousedown", close);
-      document.removeEventListener("touchstart", close);
-    };
-  }, [reportOpen]);
 
   // refresh when the tab regains focus or another tab writes to storage
   // (also re-reads the theme so it stays in sync with Session)
@@ -1013,11 +1009,9 @@ export default function Performance({ onBack } = {}) {
   };
   const onDownloadReport = () => {
     downloadHTML(buildReportHTML(reportPayload()), reportFileName());
-    setReportOpen(false);
   };
   const onPrintReport = () => {
     printHTML(buildReportHTML(reportPayload()));
-    setReportOpen(false);
   };
 
   const targetPct = target > 0 ? Math.max(0, Math.min(100, (stats.net / target) * 100)) : 0;
@@ -1063,66 +1057,12 @@ export default function Performance({ onBack } = {}) {
     <div className="pf-root" data-theme={theme}>
       <style>{CSS}</style>
       <div className="pf-wrap">
-        {/* header */}
         <header className="pf-top">
-          <div className="pf-head-left">
-            <button className="pf-back" onClick={goBack} aria-label="Back to The Session">{"\u2039"} Session</button>
-          </div>
-
-          <div className="pf-head-center">
-            <h1>Performance</h1>
-          </div>
-
-          <div className="pf-head-right">
-            <div className="pf-dl-wrap">
-              <button
-                className="pf-dl"
-                onClick={() => setReportOpen((o) => !o)}
-                disabled={entries.length === 0}
-                aria-haspopup="menu"
-                aria-expanded={reportOpen}
-                aria-label="Download report"
-              >
-                Report
-              </button>
-
-              {reportOpen && (
-                <div className="pf-dl-menu" role="menu" aria-label="Report actions">
-                  <div className="pf-rp">
-                    <label className="pf-rp-l" htmlFor="pf-period">Report period</label>
-                    <select id="pf-period" className="pf-rp-sel" value={periodId} onChange={(e) => setPeriodId(e.target.value)}>
-                      {periodOptions.map((o) => (
-                        <option key={o.id} value={o.id}>{o.label}</option>
-                      ))}
-                    </select>
-                    {periodId === "custom" && (
-                      <div className="pf-rp-dates">
-                        <input type="date" value={custom.from} max={custom.to || undefined} onChange={(e) => setCustom({ ...custom, from: e.target.value })} />
-                        <input type="date" value={custom.to} min={custom.from || undefined} onChange={(e) => setCustom({ ...custom, to: e.target.value })} />
-                      </div>
-                    )}
-                    <div className="pf-rp-meta">
-                      {reportDays.length
-                        ? `${reportDays.length} trading ${reportDays.length === 1 ? "day" : "days"} included`
-                        : "No trading days in this period"}
-                    </div>
-                  </div>
-                  <button type="button" className="pf-dl-item" onClick={onDownloadReport} disabled={!reportDays.length}>
-                    <span className="pf-dl-title">Download report</span>
-                    <span className="pf-dl-sub">.html file, opens anywhere</span>
-                  </button>
-                  <button type="button" className="pf-dl-item" onClick={onPrintReport} disabled={!reportDays.length}>
-                    <span className="pf-dl-title">Save as PDF</span>
-                    <span className="pf-dl-sub">choose "Save as PDF" in the print window</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <button className="pf-theme" onClick={toggleTheme} aria-label="Toggle theme">
-              {theme === "light" ? "🌙" : "☀️"}
-            </button>
-          </div>
+          <button className="pf-back" onClick={goBack} aria-label="Back to The Session">{"\u2039"} Session</button>
+          <h1>Performance</h1>
+          <button className="pf-theme" onClick={toggleTheme} aria-label="Toggle theme">
+            {theme === "light" ? "🌙" : "☀️"}
+          </button>
         </header>
 
         {/* month chips */}
@@ -1163,6 +1103,80 @@ export default function Performance({ onBack } = {}) {
               {targetMet ? "Target reached. Anything from here is a bonus." : stats.net < 0 ? `${money(Math.abs(stats.net))} in the hole \u2014 ${money(target - stats.net)} to reach target.` : `${money(target - stats.net)} to go this month.`}
             </div>
           )}
+        </div>
+
+        <div className="pf-report-card">
+          <div className="pf-report-head">
+            <div>
+              <div className="pf-report-kicker">Report</div>
+              <div className="pf-report-label">{monthLabel(monthKey)}</div>
+            </div>
+            <div className="pf-report-actions">
+              <button type="button" className="pf-report-btn" onClick={onDownloadReport} disabled={!reportDays.length}>Download</button>
+              <button type="button" className="pf-report-btn primary" onClick={onPrintReport} disabled={!reportDays.length}>Print</button>
+            </div>
+          </div>
+
+          <div className="pf-rp">
+            <label className="pf-rp-l" htmlFor="pf-period">Report period</label>
+            <select id="pf-period" className="pf-rp-sel" value={periodId} onChange={(e) => setPeriodId(e.target.value)}>
+              {periodOptions.map((o) => (
+                <option key={o.id} value={o.id}>{o.label}</option>
+              ))}
+            </select>
+            {periodId === "custom" && (
+              <div className="pf-rp-dates">
+                <input type="date" value={custom.from} max={custom.to || undefined} onChange={(e) => setCustom({ ...custom, from: e.target.value })} />
+                <input type="date" value={custom.to} min={custom.from || undefined} onChange={(e) => setCustom({ ...custom, to: e.target.value })} />
+              </div>
+            )}
+            <div className="pf-rp-meta">
+              {reportDays.length
+                ? `${reportDays.length} trading ${reportDays.length === 1 ? "day" : "days"} included`
+                : "No trading days in this period"}
+            </div>
+          </div>
+        </div>
+
+        {/* report */}
+        <div className="pf-report">
+          <div className="pf-report-head">
+            <div className="pf-report-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M7 3.5h7.5L18.5 7v12.5a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
+                <path d="M14.5 3.5V7h3.5M9 12h6M9 15h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <div>
+              <h3>Performance report</h3>
+              <p>A formal report of your results. Mon–Fri trading days only.</p>
+            </div>
+          </div>
+
+          <div>
+            <label className="pf-report-l" htmlFor="pf-period">Period</label>
+            <select id="pf-period" className="pf-report-sel" value={periodId} onChange={(e) => setPeriodId(e.target.value)}>
+              {periodOptions.map((o) => (
+                <option key={o.id} value={o.id}>{o.label}</option>
+              ))}
+            </select>
+            {periodId === "custom" && (
+              <div className="pf-report-dates">
+                <input type="date" value={custom.from} max={custom.to || undefined} onChange={(e) => setCustom({ ...custom, from: e.target.value })} />
+                <input type="date" value={custom.to} min={custom.from || undefined} onChange={(e) => setCustom({ ...custom, to: e.target.value })} />
+              </div>
+            )}
+            <div className="pf-report-meta">
+              {reportDays.length
+                ? `${reportDays.length} trading ${reportDays.length === 1 ? "day" : "days"} included`
+                : "No trading days in this period"}
+            </div>
+          </div>
+
+          <div className="pf-report-actions">
+            <button type="button" className="pf-report-btn ghost" onClick={onPrintReport} disabled={!reportDays.length}>Save as PDF</button>
+            <button type="button" className="pf-report-btn primary" onClick={onDownloadReport} disabled={!reportDays.length}>Download .html</button>
+          </div>
         </div>
 
         {stats.n === 0 ? (
@@ -1532,7 +1546,19 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .pf-theme{margin-left:auto;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);border-radius:var(--r-pill);padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);transition:all .18s ease;}
 .pf-theme:hover{border-color:var(--amber);color:var(--text);}
 
-/* ---------- dark-only: obsidian & gold details ---------- */
+.pf-report-card{background:var(--surface);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--border);box-shadow:var(--shadow-card);border-radius:26px;padding:16px;margin:0 0 18px;}
+.pf-report-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;}
+.pf-report-kicker{font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+.pf-report-label{font-size:16px;font-weight:800;letter-spacing:-.02em;}
+.pf-report-actions{display:flex;gap:8px;}
+.pf-report-btn{border:1px solid var(--border);background:var(--surface-2);color:var(--text);font:inherit;font-size:12px;font-weight:700;border-radius:12px;padding:9px 12px;cursor:pointer;}
+.pf-report-btn.primary{background:var(--btn);border-color:transparent;color:var(--on-accent);}
+.pf-report-btn:disabled{opacity:.45;cursor:default;}
+.pf-rp{padding:0;}
+.pf-rp-l{display:block;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+.pf-rp-sel,.pf-rp-dates input{width:100%;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:9px 10px;font:inherit;font-size:12.5px;font-weight:600;}
+.pf-rp-dates{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
+.pf-rp-meta{font-size:11px;color:var(--muted);margin-top:10px;}
 .pf-root:not([data-theme="light"])::after{
   content:""; position:fixed; left:0; right:0; top:0; height:360px; pointer-events:none; z-index:0;
   background-image:

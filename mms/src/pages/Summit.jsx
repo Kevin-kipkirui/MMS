@@ -65,25 +65,28 @@ const POINTS = LEVELS.map((_, i) => [
   262 - Math.pow(i / 9, 1.15) * 205 - (i % 2 ? 6 : 0),
 ]);
 
-// Weeks always start on Sunday and end on Saturday, so every row lines up.
+// Weeks start on Monday and show Mon–Fri only (5 rows).
 function buildContributionWeeks(history, weeks = 26) {
   const byDate = {};
   history.forEach((h) => { byDate[h.date] = h; });
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const endPad = 6 - today.getDay(); // days left in this week
-  const startOffset = (weeks - 1) * 7 + today.getDay();
+  const sinceMonday = (today.getDay() + 6) % 7; // Mon = 0 … Sun = 6
+  const thisMonday = new Date(today);
+  thisMonday.setDate(today.getDate() - sinceMonday);
 
-  const days = [];
-  for (let i = startOffset; i >= -endPad; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const key = dateKey(d);
-    days.push({ date: key, month: d.getMonth(), entry: byDate[key] || null, isFuture: d > today });
-  }
   const grid = [];
-  for (let i = 0; i < days.length; i += 7) grid.push(days.slice(i, i + 7));
+  for (let w = weeks - 1; w >= 0; w--) {
+    const col = [];
+    for (let d = 0; d < 5; d++) {
+      const dt = new Date(thisMonday);
+      dt.setDate(thisMonday.getDate() - w * 7 + d);
+      const key = dateKey(dt);
+      col.push({ date: key, month: dt.getMonth(), entry: byDate[key] || null, isFuture: dt > today });
+    }
+    grid.push(col);
+  }
   return grid;
 }
 
@@ -251,7 +254,7 @@ function ContributionGraph() {
       <div className="sm-gh-wrap" ref={scrollRef}>
         <div className="sm-gh-body">
           <div className="sm-gh-days" aria-hidden="true">
-            {["", "M", "", "W", "", "F", ""].map((d, i) => <span key={i}>{d}</span>)}
+            {["M", "", "W", "", "F"].map((d, i) => <span key={i}>{d}</span>)}
           </div>
           <div>
             <div className="sm-gh-months" aria-hidden="true">
