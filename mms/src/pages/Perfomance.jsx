@@ -284,6 +284,187 @@ function buildInsights(t, fmt) {
   return out;
 }
 
+// ---------- report export ----------
+const esc = (s) =>
+String(s).replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">").replace(/"/g, "");
+
+const REPORT_CSS = `*{box-sizing:border-box;margin:0} body{background:#c9ccd3;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#1b2540;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:28px 12px} .page{max-width:760px;margin:0 auto;background:#f4f5f8;box-shadow:0 6px 30px rgba(0,0,0,.28);padding-bottom:26px} .bar{display:flex;align-items:center;justify-content:space-between;padding:16px 26px;background:linear-gradient(160deg,#25356a,#0a1028);color:#fff;border-bottom:3px solid #c99f48} .bar .t{font-size:24px;font-weight:800;letter-spacing:.08em} .bar .t i{font-style:normal;color:#e8c97a;margin-right:10px} .bar .pill{font-size:12px;font-weight:700;letter-spacing:.06em;padding:6px 14px;border-radius:999px;background:rgba(255,255,255,.14);border:1px solid rgba(232,201,122,.5)} .meta{display:flex;justify-content:space-between;align-items:flex-end;padding:18px 26px 0;color:#5d6b8c;font-size:13px;line-height:1.4} .meta b{color:#1b2540;font-size:15px} .meta .r{font-size:14px;font-weight:600} .hero{margin:16px 26px 0;padding:18px 20px;border-radius:18px;background:linear-gradient(155deg,#25356a,#0a1028);color:#fff;display:flex;gap:20px;align-items:center;justify-content:space-between} .hero .k{font-size:12px;opacity:.75;font-weight:600} .hero .big{font-size:40px;font-weight:800;letter-spacing:-.03em;line-height:1.05} .hero .big.pos{color:#8dffc0}.hero .big.neg{color:#ffb0a8} .hero .of{font-size:12px;opacity:.8;margin-top:4px} .hero .tw{flex:1;max-width:260px} .hero .tbar{height:10px;border-radius:99px;background:rgba(255,255,255,.2);overflow:hidden} .hero .tbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#c99f48,#f6e0a2)} .hero .tsub{font-size:11.5px;opacity:.85;margin-top:8px;text-align:right} .sec{margin:26px 26px 0} .sec h2{font-size:18px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#1f8f5f;padding-bottom:6px;border-bottom:2px solid #4a5168;margin-bottom:14px} .cols{display:grid;grid-template-columns:1fr 1fr;gap:28px} .mr{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #dfe3ec} .mr:last-child{border-bottom:none} .ml{font-size:14.5px;font-weight:700} .ms{font-size:10.5px;color:#7a86a3;margin-top:2px} .mv{text-align:right} .mv b{display:block;font-size:19px;font-weight:800;font-variant-numeric:tabular-nums} .dl{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums} .dl.up{color:#1f9d6b}.dl.dn{color:#d9534f}.dl.na{color:#9aa4bd;font-weight:500} .pos{color:#1f9d6b}.neg{color:#d9534f} .wks{display:grid;grid-template-columns:repeat(4,1fr);gap:12px} .wk{background:#fff;border:1px solid #dfe3ec;border-radius:12px;padding:12px} .wk.best{border-color:#1f9d6b;box-shadow:0 0 0 3px rgba(31,157,107,.14)} .wk.worst{border-color:#d9534f;box-shadow:0 0 0 3px rgba(217,83,79,.12)} .wk .n{font-size:13px;font-weight:800} .wk .s{font-size:10.5px;color:#7a86a3} .wk .v{font-size:19px;font-weight:800;margin:8px 0 6px;font-variant-numeric:tabular-nums} .wk .x{font-size:10.5px;color:#5d6b8c;display:flex;justify-content:space-between;margin-top:3px} .wk .x b{color:#1b2540} .tag{font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:99px;margin-left:6px} .tag.pos{background:rgba(31,157,107,.14)}.tag.neg{background:rgba(217,83,79,.14)} .br{display:grid;grid-template-columns:110px 1fr 92px;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid #dfe3ec} .br:last-child{border-bottom:none} .br .bn b{display:block;font-size:13px}.br .bn span{font-size:10.5px;color:#7a86a3} .track{position:relative;height:14px;border-radius:99px;background:#e6e9f1;overflow:hidden} .track:before{content:"";position:absolute;left:50%;top:0;bottom:0;width:1.5px;background:#b9c0d3} .track i{position:absolute;top:0;bottom:0;border-radius:99px} .br .bv{text-align:right;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums} .br .bv span{display:block;font-size:10px;color:#7a86a3;font-weight:500} .top{display:grid;grid-template-columns:repeat(5,1fr);border-top:0} .td{padding:0 12px;border-left:1px solid #d3d8e4} .td:first-child{border-left:none;padding-left:0} .td .rk{font-size:32px;font-weight:300;color:#5d6b8c;line-height:1} .td .rk sup{font-size:12px;vertical-align:top} .td .dt{font-size:11px;color:#7a86a3;margin:4px 0 10px} .td .nv{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums} .td .st{font-size:11px;color:#5d6b8c;margin-top:6px;line-height:1.5} .td .nt{font-size:10.5px;color:#5d6b8c;font-style:italic;margin-top:8px;line-height:1.4} .ins{background:#fff;border:1px solid #dfe3ec;border-radius:12px;padding:10px 14px;font-size:12.5px;line-height:1.45;margin-bottom:8px} .ins.pos{border-left:4px solid #1f9d6b}.ins.neg{border-left:4px solid #d9534f} .foot{margin:26px 26px 0;padding-top:14px;border-top:2px solid #4a5168;text-align:center;font-size:11px;color:#7a86a3;line-height:1.6} .foot b{color:#c99f48;letter-spacing:.1em} @media (max-width:640px){.cols{grid-template-columns:1fr}.wks{grid-template-columns:1fr 1fr}.top{grid-template-columns:1fr 1fr}.td{padding:10px 0;border-left:none}.hero{flex-direction:column;align-items:stretch}.hero .tw{max-width:none}} @page{margin:10mm} @media print{body{background:#fff;padding:0}.page{box-shadow:none;max-width:none}.sec,.mr,.wk,.br,.td,.ins{break-inside:avoid}}`;
+
+function buildReportHTML(o) {
+const { monthKey, stats, prev, monthDays, weekData, weekInsights, timeData, insights, currency, target, weekLabel, timeLabel } = o;
+const money = (n) => currency + Math.abs(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+const fmt = (n) => (n > 0 ? "+" : n < 0 ? "\u2212" : "") + money(n);
+const pct = (v) => (v == null ? "\u2014" : Math.round(v) + "%");
+const pfx = (v) => (v == null ? "\u2014" : v === Infinity ? "\u221E" : v.toFixed(2));
+const p = prev ? prev.s : null;
+const prevName = prev ? monthLabel(prev.key, true).split(" ")[0] : "";
+
+// up/down arrow vs previous month. inv = true when lower is better (drawdown)
+const delta = (cur, before, kind, inv) => {
+if (cur == null || before == null) return '\u2014';
+const d = cur - before;
+if (!isFinite(d)) return '\u2014';
+if (Math.abs(d) < 0.005) return 'no change';
+const good = inv ? d < 0 : d > 0;
+const txt = kind === "money" ? money(d) : kind === "pts" ? Math.abs(Math.round(d)) + " pts" : Math.abs(d).toFixed(2);
+return `<span class="dl ${good ? "up" : "dn"}">${d > 0 ? "\u25B2" : "\u25BC"} ${txt}</span>`;
+};
+
+const metrics = [
+{ l: "Net P&L", s: "closed trades, month total", v: fmt(stats.net), c: stats.net > 0 ? "pos" : stats.net < 0 ? "neg" : "", d: delta(stats.net, p && p.net, "money") },
+{ l: "Win rate", s: `${stats.wins}W \u00B7 ${stats.losses}L \u00B7 ${stats.be}BE`, v: pct(stats.winRate), d: delta(stats.winRate, p && p.winRate, "pts") },
+{ l: "Profit factor", s: "gross win \u00F7 gross loss", v: pfx(stats.pf), d: delta(stats.pf, p && p.pf, "num") },
+{ l: "Expectancy", s: "average per trade", v: stats.expectancy == null ? "\u2014" : fmt(stats.expectancy), d: delta(stats.expectancy, p && p.expectancy, "money") },
+{ l: "Green days", s: `${stats.green} of ${stats.n} days`, v: pct(stats.greenRate), d: delta(stats.greenRate, p && p.greenRate, "pts") },
+{ l: "Max drawdown", s: "peak to trough, daily", v: stats.maxDD > 0 ? "\u2212" + money(stats.maxDD) : money(0), c: stats.maxDD > 0 ? "neg" : "", d: delta(stats.maxDD, p && p.maxDD, "money", true) },
+];
+const metricsHtml = metrics
+.map((m) => `<div class="mr"><div><div class="ml">${m.l}</div><div class="ms">${m.s}</div></div><div class="mv"><b class="${m.c || ""}">${m.v}</b>${m.d}</div></div>`)
+.join("");
+
+// daily bars
+const dailySvg = (() => {
+const W = 340, H = 190, PX = 8, PT = 14, PB = 26;
+const total = new Date(Number(monthKey.slice(0, 4)), Number(monthKey.slice(5, 7)), 0).getDate();
+const byDay = {};
+monthDays.forEach((d) => { byDay[Number(d.date.slice(8, 10))] = d.net || 0; });
+const nets = Object.values(byDay);
+const maxPos = Math.max(0, ...nets), maxNeg = Math.max(0, ...nets.map((v) => -v));
+const range = maxPos + maxNeg || 1, plotH = H - PT - PB, k = plotH / range, zeroY = PT + plotH * (maxPos / range);
+const slot = (W - 2 * PX) / total, bw = Math.max(3, slot * 0.6);
+let s = `<svg viewBox="0 0 ${W} ${H}" width="100%"><line x1="${PX}" x2="${W - PX}" y1="${zeroY}" y2="${zeroY}" stroke="#c4cada" stroke-dasharray="3 4"/>`;
+for (let day = 1; day <= total; day++) {
+const v = byDay[day], cx = PX + (day - 1) * slot + slot / 2;
+if (v !== undefined) {
+const h = Math.max(2, Math.abs(v) * k);
+s += `<rect x="${(cx - bw / 2).toFixed(1)}" y="${(v >= 0 ? zeroY - h : zeroY).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${v >= 0 ? "#1f9d6b" : "#d9534f"}"/>`;
+}
+if (day === 1 || day % 5 === 0) s += `<text x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="9" font-weight="600" fill="#7a86a3">${day}</text>`;
+}
+return s + "";
+})();
+
+// equity curve
+const equitySvg = (() => {
+const W = 700, H = 150, PX = 10, PT = 12, PB = 12;
+const pts = [0, ...stats.curve.map((c) => c.cum)];
+const min = Math.min(0, ...pts), max = Math.max(0, ...pts), range = max - min || 1;
+const x = (i) => PX + (i / (pts.length - 1)) * (W - 2 * PX);
+const y = (v) => PT + (1 - (v - min) / range) * (H - PT - PB);
+const line = pts.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
+const area = `${line} L${x(pts.length - 1).toFixed(1)} ${y(0).toFixed(1)} L${x(0).toFixed(1)} ${y(0).toFixed(1)} Z`;
+const col = pts[pts.length - 1] >= 0 ? "#1f9d6b" : "#d9534f";
+return `<svg viewBox="0 0 ${W} ${H}" width="100%"><line x1="${PX}" x2="${W - PX}" y1="${y(0)}" y2="${y(0)}" stroke="#c4cada" stroke-dasharray="3 4"/><path d="${area}" fill="${col}" opacity=".14"/><path d="${line}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+})();
+
+// week of the month
+const weeksHtml = weekData.active > 0
+? `<div class="sec"><h2>Week of the month <small style="font-size:11px;letter-spacing:0;color:#7a86a3;text-transform:none;font-weight:500">${esc(weekLabel)}</small></h2><div class="wks">${weekData.rows.map((r) => {         const best = weekData.best && weekData.best.id === r.id, worst = weekData.worst && weekData.worst.id === r.id;         return `<div class="wk${best ? " best" : worst ? " worst" : ""}">
+
+${r.label}${best ? 'Best' : worst ? 'Worst' : ""}
+Days ${r.span}
+<div class="v ${r.net > 0 ? "pos" : r.net < 0 ? "neg" : ""}">${r.n ? fmt(r.net) : "\u2014"}Win rate**${pct(r.s.winRate)}**
+Avg / day**${r.avgDay == null ? "\u2014" : fmt(r.avgDay)}**
+Days**${r.n}**
+`;       }).join("")}</div></div>`
+: "";
+
+// trading blocks
+const blockMax = Math.max(1, ...timeData.blocks.map((b) => Math.abs(b.net)));
+const timesHtml = timeData.counted > 0
+? `<div class="sec"><h2>Best &amp; worst times <small style="font-size:11px;letter-spacing:0;color:#7a86a3;text-transform:none;font-weight:500">${esc(timeLabel)}</small></h2>${timeData.blocks.map((b) => {         const w = (Math.abs(b.net) / blockMax) * 50;         const wr = b.wins + b.losses > 0 ? Math.round((b.wins / (b.wins + b.losses)) * 100) + "%" : "\u2014";         const bar = b.trades ? `<i style="${b.net >= 0 ? "left:50%" : "right:50%"};width:${w}%;background:${b.net >= 0 ? "#1f9d6b" : "#d9534f"}">`: "";         return`
+
+**${b.short}**${b.t}
+${bar}
+<div class="bv ${b.net > 0 ? "pos" : b.net < 0 ? "neg" : ""}">${b.trades ? fmt(b.net) : "\u2014"}${b.trades ? b.trades + " trades \u00B7 " + wr : "no trades"}
+`;       }).join("")}</div>`
+: "";
+
+// top days (like "Most popular this week")
+const sfx = ["ST", "ND", "RD", "TH", "TH"];
+const topDays = monthDays.slice().sort((a, b) => (b.net || 0) - (a.net || 0)).slice(0, 5);
+const topHtml = topDays.length
+? `<div class="sec"><h2>Top days this month</h2><div class="top">${topDays.map((d, i) => {         const share = stats.net > 0 && (d.net || 0) > 0 ? Math.round(((d.net || 0) / stats.net) * 100) + "% of month" : "";         const dt = new Date(d.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });         return `
+
+${i + 1}${sfx[i]}
+${dt}
+<div class="nv ${(d.net || 0) > 0 ? "pos" : (d.net || 0) < 0 ? "neg" : ""}">${fmt(d.net || 0)}
+${d.wins || 0}W \u00B7 ${d.losses || 0}L \u00B7 ${d.breakeven || 0}BE
+${share}
+${d.note ? `<div class="nt">\u201C${esc(d.note).slice(0, 90)}\u201D</div>` : ""}`;       }).join("")}</div></div>`
+: "";
+
+const notes = [...insights, ...weekInsights].filter((x) => x.tone !== "note");
+const insHtml = notes.length
+? `<div class="sec"><h2>What stands out</h2>${notes.map((x) => `
+
+${esc(x.text)}
+`).join("")}</div>`
+: "";
+
+const tp = target > 0 ? Math.max(0, Math.min(100, (stats.net / target) * 100)) : 0;
+const heroRight = target > 0
+? `<div class="tw"><div class="tbar"><i style="width:${tp}%"></i></div><div class="tsub">${Math.round(tp)}% of ${money(target)} target</div></div>`
+: "";
+const vs = prev ? `<div class="of">${stats.net >= p.net ? "\u25B2" : "\u25BC"} ${money(stats.net - p.net)} vs ${esc(prevName)}</div>` : "";
+
+return `<title>Performance report ${esc(monthLabel(monthKey))}</title><style>${REPORT_CSS}</style>
+
+*\u25B2*PERFORMANCE REPORT
+${esc(monthLabel(monthKey, true))}
+
+**The Session**
+Trading journal \u00B7 ${stats.n} trading ${stats.n === 1 ? "day" : "days"} \u00B7 ${stats.trades} trades
+${esc(monthLabel(monthKey))}
+
+Net result
+${fmt(stats.net)}
+${vs}
+${heroRight}
+
+## Key metrics
+${metricsHtml}
+
+## Month at a glance
+${dailySvg}
+
+## Equity curve
+${equitySvg}
+
+${weeksHtml}${timesHtml}${topHtml}${insHtml}
+**THE SESSION**
+Win rate = wins \u00F7 (wins + losses). Trades within \u00B1${money(BE_LIMIT)} count as break-even.
+Generated ${new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
+
+`;
+}
+function downloadHTML(html, filename) {
+const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+const a = document.createElement("a");
+a.href = url;
+a.download = filename;
+document.body.appendChild(a);
+a.click();
+a.remove();
+setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+// opens the print dialog on a hidden frame, so the user can pick "Save as PDF"
+function printHTML(html) {
+const f = document.createElement("iframe");
+f.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+document.body.appendChild(f);
+const doc = f.contentWindow.document;
+doc.open();
+doc.write(html);
+doc.close();
+setTimeout(() => {
+f.contentWindow.focus();
+f.contentWindow.print();
+setTimeout(() => f.remove(), 2500);
+}, 600);
+}
+
 // ---------- presentational pieces ----------
 function DimMoney({ text }) {
   if (text == null) return null;
@@ -474,6 +655,18 @@ export default function Performance({ onBack } = {}) {
   const [scope, setScope] = useState("all"); // "all" | "month" (for the time analysis)
   const [weekScope, setWeekScope] = useState("year"); // "year" | "all" (for week-of-month)
   const [theme, setTheme] = useState(readTheme);
+  const [reportOpen, setReportOpen] = useState(false);
+
+  useEffect(() => {
+    if (!reportOpen) return;
+    const close = (e) => { if (!e.target.closest(".pf-dl-wrap")) setReportOpen(false); };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("touchstart", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("touchstart", close);
+    };
+  }, [reportOpen]);
 
   // refresh when the tab regains focus or another tab writes to storage
   // (also re-reads the theme so it stays in sync with Session)
@@ -543,6 +736,26 @@ export default function Performance({ onBack } = {}) {
   const olderMonth = idx >= 0 ? months[idx + 1] : undefined;
   const newerMonth = idx > 0 ? months[idx - 1] : undefined;
 
+  // nearest earlier month that actually has data, for "vs last month" deltas
+  const prevStats = useMemo(() => {
+    const k = months.slice(idx + 1).find((m) => (byMonth[m] || EMPTY).length > 0);
+    return k ? { key: k, s: computeStats(byMonth[k]) } : null;
+  }, [months, idx, byMonth]);
+
+  const reportPayload = () => ({
+    monthKey, stats, prev: prevStats, monthDays, weekData, weekInsights, timeData, insights, currency, target,
+    weekLabel: weekScope === "year" ? yearKey : "All time",
+    timeLabel: scope === "month" ? monthLabel(monthKey, true) : "All time",
+  });
+  const onDownloadReport = () => {
+    downloadHTML(buildReportHTML(reportPayload()), `performance-report-${monthKey}.html`);
+    setReportOpen(false);
+  };
+  const onPrintReport = () => {
+    printHTML(buildReportHTML(reportPayload()));
+    setReportOpen(false);
+  };
+
   const targetPct = target > 0 ? Math.max(0, Math.min(100, (stats.net / target) * 100)) : 0;
   const targetMet = target > 0 && stats.net >= target;
 
@@ -588,11 +801,45 @@ export default function Performance({ onBack } = {}) {
       <div className="pf-wrap">
         {/* header */}
         <header className="pf-top">
-          <button className="pf-back" onClick={goBack} aria-label="Back to The Session">{"\u2039"} Session</button>
-          <h1>Performance</h1>
-          <button className="pf-theme" onClick={toggleTheme} aria-label="Toggle theme">
-            {theme === "light" ? "🌙 Dark" : "☀️ Light"}
-          </button>
+          <div className="pf-head-left">
+            <button className="pf-back" onClick={goBack} aria-label="Back to The Session">{"\u2039"} Session</button>
+          </div>
+
+          <div className="pf-head-center">
+            <h1>Performance</h1>
+          </div>
+
+          <div className="pf-head-right">
+            <div className="pf-dl-wrap">
+              <button
+                className="pf-dl"
+                onClick={() => setReportOpen((o) => !o)}
+                disabled={stats.n === 0}
+                aria-haspopup="menu"
+                aria-expanded={reportOpen}
+                aria-label="Download report"
+              >
+                Report
+              </button>
+
+              {reportOpen && (
+                <div className="pf-dl-menu" role="menu" aria-label="Report actions">
+                  <button type="button" className="pf-dl-item" onClick={onDownloadReport}>
+                    <span className="pf-dl-title">Download report</span>
+                    <span className="pf-dl-sub">.html file, opens anywhere</span>
+                  </button>
+                  <button type="button" className="pf-dl-item" onClick={onPrintReport}>
+                    <span className="pf-dl-title">Save as PDF</span>
+                    <span className="pf-dl-sub">choose "Save as PDF" in the print window</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button className="pf-theme" onClick={toggleTheme} aria-label="Toggle theme">
+              {theme === "light" ? "🌙" : "☀️"}
+            </button>
+          </div>
         </header>
 
         {/* month chips */}
@@ -622,6 +869,11 @@ export default function Performance({ onBack } = {}) {
             <span className="pf-chip">{stats.n} trading {stats.n === 1 ? "day" : "days"}</span>
             <span className="pf-chip">{pct(stats.winRate)} win rate</span>
             <span className="pf-chip">PF {pfText(stats.pf)}</span>
+            {prevStats && (
+              <span className="pf-chip">
+                {stats.net >= prevStats.s.net ? "\u25B2" : "\u25BC"} {money(stats.net - prevStats.s.net)} vs {monthLabel(prevStats.key, true).split(" ")[0]}
+              </span>
+            )}
           </div>
           {target > 0 && (
             <div className="pf-hero-sub">
@@ -1020,4 +1272,32 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .pf-root:not([data-theme="light"]) .pf-wk.worst{border-color:rgba(255,107,125,.4);}
 .pf-root:not([data-theme="light"]) .pf-mchip.on,
 .pf-root:not([data-theme="light"]) .pf-seg button.on{box-shadow:0 8px 18px -8px rgba(232,201,122,.5);}
+
+/* ---------- centered header + section titles ---------- */
+.pf-top{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;}
+.pf-top h1{text-align:center;white-space:nowrap;font-size:clamp(20px,5.6vw,30px);padding:0 .14em;letter-spacing:-.02em;}
+.pf-back{justify-self:start;}
+.pf-top-r{justify-self:end;display:flex;align-items:center;gap:6px;}
+.pf-theme{margin-left:0;padding:7px 11px;}
+.pf-section{flex-direction:column;align-items:center;justify-content:center;gap:4px;text-align:center;}
+.pf-sub{text-align:center;}
+
+/* ---------- report button + menu ---------- */
+.pf-dl-wrap{position:relative;}
+.pf-dl{display:inline-flex;align-items:center;gap:6px;border:none;background:var(--btn);color:var(--on-accent);border-radius:var(--r-pill);padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;box-shadow:0 8px 18px -8px var(--glow-amber);transition:transform .15s ease,opacity .15s ease;}
+.pf-dl:active{transform:scale(.97);}
+.pf-dl:disabled{opacity:.4;cursor:default;box-shadow:none;}
+.pf-dl-menu{position:absolute;right:0;top:calc(100% + 10px);z-index:50;width:min(260px,calc(100vw - 36px));padding:8px;border-radius:20px;background:var(--modal-bg);border:1px solid var(--border);box-shadow:var(--shadow-card);animation:pf-menu-in .18s cubic-bezier(.2,.9,.3,1);transform-origin:top right;}
+.pf-dl-menu button{display:block;width:100%;text-align:left;border:0;background:none;color:var(--text);padding:11px 14px;border-radius:14px;cursor:pointer;}
+.pf-dl-menu button:hover,.pf-dl-menu button:focus-visible{background:var(--surface-2);outline:none;}
+.pf-dl-menu b{display:block;font-size:13.5px;font-weight:700;}
+.pf-dl-menu span{display:block;font-size:11px;color:var(--muted);margin-top:2px;}
+@keyframes pf-menu-in{from{opacity:0;transform:translateY(-6px) scale(.97);}to{opacity:1;transform:none;}}
+
+@media (max-width:420px){
+  .pf-dl span{display:none;}
+  .pf-dl{padding:9px 11px;}
+  .pf-back{padding:7px 10px;}
+}
+@media (prefers-reduced-motion:reduce){.pf-dl-menu{animation:none;}}
 `;
