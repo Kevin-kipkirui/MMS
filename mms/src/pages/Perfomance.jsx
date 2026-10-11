@@ -904,6 +904,50 @@ function WeekChart({ rows, fmt }) {
   );
 }
 
+// ---------- visual summary pieces ----------
+function ShareDonut({ items, center, centerSub, fmt }) {
+  const r = 54, sw = 18, c = 2 * Math.PI * r;
+  const live = items.filter((i) => i.value !== 0);
+  const total = live.reduce((a, i) => a + Math.abs(i.value), 0);
+  const gap = live.length > 1 ? 3 : 0;
+  let off = 0;
+  return (
+    <svg viewBox="0 0 150 150" width="100%" height="100%" role="img" aria-label={center} style={{ display: "block" }}>
+      <circle cx="75" cy="75" r={r} fill="none" strokeWidth={sw} style={{ stroke: "var(--surface-2)" }} />
+      {total > 0 && live.map((it, i) => {
+        const len = (Math.abs(it.value) / total) * c;
+        const seg = Math.max(0, len - gap);
+        const el = (
+          <circle key={it.id || i} cx="75" cy="75" r={r} fill="none" strokeWidth={sw}
+            strokeDasharray={`${seg} ${c - seg}`} strokeDashoffset={-off} transform="rotate(-90 75 75)"
+            style={{ stroke: it.value >= 0 ? "var(--teal)" : "var(--rose)" }}>
+            <title>{`${it.label}: ${fmt(it.value)}`}</title>
+          </circle>
+        );
+        off += len;
+        return el;
+      })}
+      <text x="75" y="73" textAnchor="middle" style={{ fill: "var(--text)", fontSize: "14px", fontWeight: 800 }}>{center}</text>
+      <text x="75" y="90" textAnchor="middle" style={{ fill: "var(--muted)", fontSize: "9.5px", fontWeight: 700 }}>{centerSub}</text>
+    </svg>
+  );
+}
+
+function HighLow({ tiles }) {
+  if (!tiles.length) return null;
+  return (
+    <div className="pf-hl-grid">
+      {tiles.map((t, i) => (
+        <div key={i} className={"pf-hl-t " + t.tone}>
+          <div className="pf-hl-k">{t.kicker}</div>
+          <div className="pf-hl-v">{t.label}</div>
+          <div className="pf-hl-s">{t.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ---------- component ----------
 export default function Performance({ onBack } = {}) {
   const [tick, setTick] = useState(0);
@@ -1068,6 +1112,23 @@ export default function Performance({ onBack } = {}) {
 
   const dailyRows = useMemo(() => monthDays.slice().reverse(), [monthDays]);
   const tone = (v) => (v > 0 ? "pos" : v < 0 ? "neg" : "");
+  const bestBlock = timeData.blocks.find((b) => b.id === bestBlockId);
+  const worstBlock = timeData.blocks.find((b) => b.id === worstBlockId);
+  const bestSlot = timeData.slots.filter((s) => s.trades > 0 && s.net > 0).sort((a, b) => b.net - a.net)[0];
+  const worstSlot = timeData.slots.filter((s) => s.trades > 0 && s.net < 0).sort((a, b) => a.net - b.net)[0];
+
+  const weekTiles = [
+    weekData.best && { tone: "pos", kicker: "Best week", label: weekData.best.label, value: fmt(weekData.best.avgDay) + " / day" },
+    weekData.worst && { tone: "neg", kicker: "Worst week", label: weekData.worst.label, value: fmt(weekData.worst.avgDay) + " / day" },
+  ].filter(Boolean);
+
+  const timeTiles = [
+    bestBlock && { tone: "pos", kicker: "Best block", label: bestBlock.short, value: fmt(bestBlock.net) },
+    worstBlock && { tone: "neg", kicker: "Weakest block", label: worstBlock.short, value: fmt(worstBlock.net) },
+    bestSlot && { tone: "pos", kicker: "Best half-hour", label: hm(bestSlot.start) + "–" + hm(bestSlot.start + 30), value: fmt(bestSlot.net) },
+    worstSlot && { tone: "neg", kicker: "Weakest half-hour", label: hm(worstSlot.start) + "–" + hm(worstSlot.start + 30), value: fmt(worstSlot.net) },
+  ].filter(Boolean);
+  const timeNet = timeData.blocks.reduce((a, b) => a + b.net, 0);
 
   return (
     <div className="pf-root" data-theme={theme}>
@@ -1260,13 +1321,20 @@ export default function Performance({ onBack } = {}) {
               })}
             </div>
 
-            {weekInsights.length > 0 && (
-              <div className="pf-insights">
-                {weekInsights.map((it, i) => (
-                  <div key={i} className={"pf-insight " + it.tone}>{it.text}</div>
-                ))}
+            <div className="pf-card">
+              <div className="pf-sum-head">
+                <div>
+                  <div className="pf-sum-k">Where the month pays</div>
+                  <div className="pf-sum-s">share of P&amp;L by week</div>
+                </div>
               </div>
-            )}
+
+              <ShareDonut items={weekData.rows.map((r) => ({ id: r.id, label: r.label + " · " + (r.n || 0) + "d", value: r.n ? r.net : 0 }))} center={fmt(weekData.total)} centerSub={"total"} fmt={fmt} />
+
+              {weekData.months < 3 && (
+                <div className="pf-sum-small">Small sample · {weekData.months} {weekData.months === 1 ? "month" : "months"}</div>
+              )}
+            </div>
           </>
         )}
 
@@ -1317,13 +1385,20 @@ export default function Performance({ onBack } = {}) {
             <h2 className="pf-section" style={{ marginTop: 22 }}>Half-hour heat<span className="pf-sub">11:00 &ndash; 17:00</span></h2>
             <div className="pf-card"><SlotChart slots={timeData.slots} fmt={fmt} /></div>
 
-            {insights.length > 0 && (
-              <div className="pf-insights">
-                {insights.map((it, i) => (
-                  <div key={i} className={"pf-insight " + it.tone}>{it.text}</div>
-                ))}
+            <div className="pf-card">
+              <div className="pf-sum-head">
+                <div>
+                  <div className="pf-sum-k">Where the day pays</div>
+                  <div className="pf-sum-s">share of P&amp;L by block</div>
+                </div>
               </div>
-            )}
+
+              <ShareDonut items={timeData.blocks.map((b) => ({ id: b.id, label: b.short + " · " + b.trades + " trades", value: b.trades ? b.net : 0 }))} center={fmt(timeNet)} centerSub={"total"} fmt={fmt} />
+
+              {timeData.counted < 20 && (
+                <div className="pf-sum-small">Small sample · {timeData.counted} timed {timeData.counted === 1 ? "trade" : "trades"}</div>
+              )}
+            </div>
           </>
         )}
 
@@ -1669,7 +1744,7 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 /* period picker */
 .pf-report-label,.pf-report-l{display:block;font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
 .pf-report-sel,.pf-report-dates input{width:100%;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:var(--r-input);padding:12px 14px;font:inherit;font-size:13px;font-weight:700;}
-.pf-report-sel{-webkit-appearance:none;appearance:none;cursor:pointer;padding-right:38px;background-image:url("data:image/svg+xml,%3Csvg xmlns='[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238b94ad' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;}
+.pf-report-sel{-webkit-appearance:none;appearance:none;cursor:pointer;padding-right:38px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238b94ad' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;}
 .pf-report-sel:focus,.pf-report-dates input:focus{border-color:var(--amber);outline:none;}
 .pf-report-sel option{background:var(--modal-bg);color:var(--text);}
 .pf-report-dates{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
@@ -1700,4 +1775,33 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .pf-report-btn{font-size:12.5px;padding:12px 6px;}
 }
 @media (max-width:340px){.pf-report-actions{grid-template-columns:1fr;}}
+
+/* ================= visual summaries ================= */
+.pf-vis{margin-top:12px;padding:16px;}
+.pf-vis-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:12px;}
+.pf-vis-h b{font-size:14px;font-weight:800;letter-spacing:-.01em;}
+.pf-vis-h span{font-size:11px;font-weight:600;color:var(--muted);}
+
+.pf-dn{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center;}
+.pf-dn-svg{width:150px;height:150px;flex:none;}
+.pf-dn-leg{flex:1;min-width:150px;display:grid;gap:8px;}
+.pf-dn-row{display:grid;grid-template-columns:10px 1fr auto;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--muted);}
+.pf-dn-row i{width:10px;height:10px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border);}
+.pf-dn-row i.up{background:var(--teal);border-color:transparent;}
+.pf-dn-row i.dn{background:var(--rose);border-color:transparent;}
+.pf-dn-row b{font-size:12.5px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--text);}
+.pf-dn-row b.pos{color:var(--teal);}
+.pf-dn-row b.neg{color:var(--rose);}
+
+.pf-hl{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px;}
+.pf-hl-t{border-radius:16px;padding:10px 12px;border:1px solid var(--border);background:var(--surface-2);min-width:0;}
+.pf-hl-t span{display:block;font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;}
+.pf-hl-t b{display:block;font-size:14px;font-weight:800;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pf-hl-t em{display:block;font-style:normal;font-size:12.5px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums;}
+.pf-hl-t.pos{background:var(--teal-dim);border-color:transparent;}
+.pf-hl-t.pos em{color:var(--teal);}
+.pf-hl-t.neg{background:var(--rose-dim);border-color:transparent;}
+.pf-hl-t.neg em{color:var(--rose);}
+
+.pf-note{display:inline-block;margin-top:12px;font-size:10.5px;font-weight:700;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-pill);padding:4px 10px;}
 `;
