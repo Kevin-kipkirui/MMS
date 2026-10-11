@@ -1142,6 +1142,7 @@ export default function Performance({ onBack } = {}) {
                 <span>{reportDays.length} {reportDays.length === 1 ? "day" : "days"}</span>
               </div>
             </div>
+
             <div className="pf-report-col">
               <div className="pf-report-label">Period</div>
               <select id="pf-period" className="pf-report-sel" value={periodId} onChange={(e) => setPeriodId(e.target.value)}>
@@ -1149,6 +1150,7 @@ export default function Performance({ onBack } = {}) {
                   <option key={o.id} value={o.id}>{periodShort(o)}</option>
                 ))}
               </select>
+
               {periodId === "custom" && (
                 <div className="pf-report-dates">
                   <div>
@@ -1161,13 +1163,14 @@ export default function Performance({ onBack } = {}) {
                   </div>
                 </div>
               )}
+
               <div className="pf-report-meta">{reportDays.length ? reportRange : "No trading days in this period"}</div>
             </div>
           </div>
 
           <div className="pf-report-metrics">
             <div className="pf-report-metric">
-              <span>Net</span>
+              <span>Net result</span>
               <strong>{reportDays.length ? fmt(reportStats.net) : "—"}</strong>
             </div>
             <div className="pf-report-metric">
@@ -1636,4 +1639,16 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
   .pf-rep-btn{font-size:12.5px;padding:12px 6px;}
 }
 @media (max-width:340px){.pf-rep-actions{grid-template-columns:1fr;}}
+
+/* featured net result (matches the hero card) */
+.pf-rep-feat{position:relative;overflow:hidden;display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:14px 16px;margin-bottom:10px;border-radius:20px;background:var(--hero);color:#fff;border:1px solid rgba(255,255,255,.22);box-shadow:var(--hero-shadow);}
+.pf-rep-feat::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(300px 140px at 100% -20%,rgba(255,255,255,.26),transparent 65%);}
+.pf-rep-feat>*{position:relative;z-index:1;}
+.pf-rep-feat-l{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.7);margin-bottom:6px;}
+.pf-rep-feat-v{font-size:clamp(28px,8vw,36px);font-weight:700;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums;}
+.pf-rep-feat-v.neg{color:#ffd0ca;}
+.pf-rep-feat-r{font-size:11.5px;font-weight:600;color:rgba(255,255,255,.8);text-align:right;font-variant-numeric:tabular-nums;max-width:48%;}
+.pf-root:not([data-theme="light"]) .pf-rep-feat{border-color:rgba(232,201,122,.30);}
+.pf-rep-stats.three{grid-template-columns:repeat(3,1fr);}
+.pf-rep-stat b{font-size:16px;}
 `;
