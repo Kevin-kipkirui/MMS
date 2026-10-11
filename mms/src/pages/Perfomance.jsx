@@ -1648,4 +1648,56 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .pf-root:not([data-theme="light"]) .pf-rep-feat{border-color:rgba(232,201,122,.30);}
 .pf-rep-stats.three{grid-template-columns:repeat(3,1fr);}
 .pf-rep-stat b{font-size:16px;}
+
+/* ================= report card (styles the existing .pf-report JSX) ================= */
+.pf-report{position:relative;overflow:hidden;margin:0 0 6px;padding:16px;border-radius:var(--r-card);background:var(--surface);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border:1px solid var(--border);box-shadow:var(--shadow-card);}
+.pf-report::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--btn);opacity:.9;}
+
+/* header: small icon tile + title (this is what fixes the giant icon) */
+.pf-report-head{display:flex;align-items:center;gap:12px;margin:2px 0 16px;padding-right:84px;}
+.pf-report-ico{flex:none;width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:var(--amber-dim);color:var(--accent-text);border:1px solid var(--border);}
+.pf-report-ico svg{width:20px;height:20px;display:block;}
+.pf-report-head h3{margin:0;font-size:15.5px;font-weight:800;letter-spacing:-.01em;}
+.pf-report-head p{margin:2px 0 0;font-size:12px;color:var(--muted);}
+
+/* days badge, pinned to the top-right corner of the card */
+.pf-report-grid{display:block;}
+.pf-report-grid>.pf-report-col:first-child{height:0;}
+.pf-report-stat{position:absolute;top:20px;right:16px;}
+.pf-report-stat span{display:inline-block;font-size:11px;font-weight:800;padding:5px 11px;border-radius:var(--r-pill);background:var(--teal-dim);color:var(--teal);font-variant-numeric:tabular-nums;white-space:nowrap;}
+
+/* period picker */
+.pf-report-label,.pf-report-l{display:block;font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+.pf-report-sel,.pf-report-dates input{width:100%;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:var(--r-input);padding:12px 14px;font:inherit;font-size:13px;font-weight:700;}
+.pf-report-sel{-webkit-appearance:none;appearance:none;cursor:pointer;padding-right:38px;background-image:url("data:image/svg+xml,%3Csvg xmlns='[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238b94ad' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;}
+.pf-report-sel:focus,.pf-report-dates input:focus{border-color:var(--amber);outline:none;}
+.pf-report-sel option{background:var(--modal-bg);color:var(--text);}
+.pf-report-dates{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
+.pf-report-dates .pf-report-l{margin-bottom:6px;}
+.pf-report-meta{font-size:12px;font-weight:600;color:var(--muted);margin:10px 2px 14px;font-variant-numeric:tabular-nums;}
+
+/* metrics: net result as a hero tile, then three small tiles */
+.pf-report-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;}
+.pf-report-metric{background:var(--surface-2);border:1px solid var(--border);border-radius:16px;padding:11px 8px;text-align:center;min-width:0;}
+.pf-report-metric span{display:block;font-size:10px;font-weight:700;color:var(--muted);margin-bottom:6px;white-space:nowrap;}
+.pf-report-metric strong{display:block;font-size:16px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pf-report-metric:first-child{grid-column:1 / -1;position:relative;overflow:hidden;text-align:left;padding:14px 16px;border-radius:20px;background:var(--hero);border:1px solid rgba(255,255,255,.22);box-shadow:var(--hero-shadow);color:#fff;}
+.pf-report-metric:first-child::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(300px 140px at 100% -20%,rgba(255,255,255,.26),transparent 65%);}
+.pf-report-metric:first-child span{position:relative;z-index:1;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.7);}
+.pf-report-metric:first-child strong{position:relative;z-index:1;font-size:clamp(28px,8vw,36px);font-weight:700;letter-spacing:-.03em;line-height:1;}
+.pf-root:not([data-theme="light"]) .pf-report-metric:first-child{border-color:rgba(232,201,122,.30);}
+
+/* buttons */
+.pf-report-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.pf-report-btn{display:inline-flex;align-items:center;justify-content:center;border-radius:var(--r-input);padding:13px 10px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;transition:transform .15s ease,opacity .15s ease,border-color .15s ease;}
+.pf-report-btn:active{transform:scale(.98);}
+.pf-report-btn.primary{border:none;background:var(--btn);color:var(--on-accent);box-shadow:0 10px 20px -10px var(--glow-amber);}
+.pf-report-btn.ghost{border:1px solid var(--border);background:var(--surface-2);color:var(--text);}
+.pf-report-btn.ghost:hover{border-color:var(--amber);}
+.pf-report-btn:disabled{opacity:.4;cursor:default;box-shadow:none;}
+@media (max-width:420px){
+.pf-report-metric strong{font-size:14px;}
+.pf-report-btn{font-size:12.5px;padding:12px 6px;}
+}
+@media (max-width:340px){.pf-report-actions{grid-template-columns:1fr;}}
 `;
