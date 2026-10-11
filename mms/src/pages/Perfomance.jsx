@@ -1142,7 +1142,6 @@ export default function Performance({ onBack } = {}) {
                 <span>{reportDays.length} {reportDays.length === 1 ? "day" : "days"}</span>
               </div>
             </div>
-
             <div className="pf-report-col">
               <div className="pf-report-label">Period</div>
               <select id="pf-period" className="pf-report-sel" value={periodId} onChange={(e) => setPeriodId(e.target.value)}>
@@ -1150,7 +1149,6 @@ export default function Performance({ onBack } = {}) {
                   <option key={o.id} value={o.id}>{periodShort(o)}</option>
                 ))}
               </select>
-
               {periodId === "custom" && (
                 <div className="pf-report-dates">
                   <div>
@@ -1163,7 +1161,6 @@ export default function Performance({ onBack } = {}) {
                   </div>
                 </div>
               )}
-
               <div className="pf-report-meta">{reportDays.length ? reportRange : "No trading days in this period"}</div>
             </div>
           </div>
