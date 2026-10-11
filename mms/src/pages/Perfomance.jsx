@@ -905,43 +905,89 @@ function WeekChart({ rows, fmt }) {
 }
 
 // ---------- visual summary pieces ----------
+const SLICE_COLORS = ["#e8c97a", "#6c9bff", "#34e0a1", "#c29bff", "#ff9f6b", "#5fd4e8"];
+
 function ShareDonut({ items, center, centerSub, fmt }) {
-  const r = 54, sw = 18, c = 2 * Math.PI * r;
-  const live = items.filter((i) => i.value !== 0);
-  const total = live.reduce((a, i) => a + Math.abs(i.value), 0);
-  const gap = live.length > 1 ? 3 : 0;
-  let off = 0;
+  const [active, setActive] = useState(null);
+  const r = 50, sw = 20, r2 = 69, sw2 = 4;
+  const c = 2 * Math.PI * r, c2 = 2 * Math.PI * r2;
+  const total = items.reduce((a, i) => a + Math.abs(i.value), 0);
+  const live = items.filter((i) => i.value !== 0).length;
+  const gap = live > 1 ? 4 : 0;
+
+  let acc = 0;
+  const segs = items.map((it, idx) => {
+    const frac = total ? Math.abs(it.value) / total : 0;
+    const s = { ...it, idx, frac, start: acc, color: SLICE_COLORS[idx % SLICE_COLORS.length] };
+    acc += frac;
+    return s;
+  });
+  const act = segs.find((s) => s.id === active) || null;
+  const toggle = (id) => setActive((cur) => (cur === id ? null : id));
+
+  if (!total) return (
+    <div className="pf-pie-empty">No results yet</div>
+  );
+
   return (
-    <svg viewBox="0 0 150 150" width="100%" height="100%" role="img" aria-label={center} style={{ display: "block" }}>
-      <circle cx="75" cy="75" r={r} fill="none" strokeWidth={sw} style={{ stroke: "var(--surface-2)" }} />
-      {total > 0 && live.map((it, i) => {
-        const len = (Math.abs(it.value) / total) * c;
-        const seg = Math.max(0, len - gap);
-        const el = (
-          <circle key={it.id || i} cx="75" cy="75" r={r} fill="none" strokeWidth={sw}
-            strokeDasharray={`${seg} ${c - seg}`} strokeDashoffset={-off} transform="rotate(-90 75 75)"
-            style={{ stroke: it.value >= 0 ? "var(--teal)" : "var(--rose)" }}>
-            <title>{`${it.label}: ${fmt(it.value)}`}</title>
-          </circle>
-        );
-        off += len;
-        return el;
-      })}
-      <text x="75" y="73" textAnchor="middle" style={{ fill: "var(--text)", fontSize: "14px", fontWeight: 800 }}>{center}</text>
-      <text x="75" y="90" textAnchor="middle" style={{ fill: "var(--muted)", fontSize: "9.5px", fontWeight: 700 }}>{centerSub}</text>
-    </svg>
+    <div className="pf-pie-wrap">
+      <svg viewBox="0 0 160 160" width="100%" height="100%" className="pf-pie-svg" role="img" aria-label={center}>
+        <circle cx="80" cy="80" r={r} fill="none" strokeWidth={sw} style={{ stroke: "var(--surface-2)" }} />
+        {segs.filter((s) => s.frac > 0).map((s) => {
+          const len = Math.max(0, s.frac * c - gap);
+          const len2 = Math.max(0, s.frac * c2 - gap);
+          const dim = act && act.id !== s.id;
+          return (
+            <g key={s.id} style={{ opacity: dim ? 0.3 : 1, transition: "opacity .2s ease", cursor: "pointer" }}
+              onMouseEnter={() => setActive(s.id)} onMouseLeave={() => setActive(null)} onClick={() => toggle(s.id)}>
+              <circle cx="80" cy="80" r={r} fill="none" strokeWidth={act && act.id === s.id ? sw + 3 : sw}
+                strokeDasharray={`${len} ${c - len}`} strokeDashoffset={-s.start * c} transform="rotate(-90 80 80)"
+                style={{ stroke: s.color, transition: "stroke-width .2s ease" }} />
+              <circle cx="80" cy="80" r={r2} fill="none" strokeWidth={sw2} strokeLinecap="round"
+                strokeDasharray={`${len2} ${c2 - len2}`} strokeDashoffset={-s.start * c2} transform="rotate(-90 80 80)"
+                style={{ stroke: s.value >= 0 ? "var(--teal)" : "var(--rose)" }} />
+            </g>
+          );
+        })}
+        <text x="80" y="75" textAnchor="middle" style={{ fill: "var(--text)", fontSize: "14px", fontWeight: 800 }}>{act ? fmt(act.value) : center}</text>
+        <text x="80" y="92" textAnchor="middle" style={{ fill: "var(--muted)", fontSize: "9.5px", fontWeight: 700 }}>{act ? Math.round(act.frac * 100) + "% of moves" : centerSub}</text>
+      </svg>
+
+      <div className="pf-pie-list">
+        {segs.map((s) => (
+          <button type="button" key={s.id}
+            className={"pf-pie-row" + (act && act.id === s.id ? " on" : "") + (s.value === 0 ? " off" : "")}
+            onMouseEnter={() => setActive(s.id)} onMouseLeave={() => setActive(null)}
+            onFocus={() => setActive(s.id)} onBlur={() => setActive(null)} onClick={() => toggle(s.id)}>
+            <i style={{ background: s.color }} />
+            <span className="pf-pie-name"><b>{s.label}</b><em>{s.sub}</em></span>
+            <span className="pf-pie-pct">{s.value === 0 ? "" : Math.round(s.frac * 100) + "%"}</span>
+            <span className={"pf-pie-val " + (s.value > 0 ? "pos" : s.value < 0 ? "neg" : "")}>
+              {s.value === 0 ? "—" : (s.value > 0 ? "▲ " : "▼ ") + fmt(s.value)}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="pf-pie-key">
+        <span><i className="up" />Profit</span>
+        <span><i className="dn" />Loss</span>
+        <span>Slice size = impact on P&amp;L</span>
+      </div>
+    </div>
   );
 }
 
 function HighLow({ tiles }) {
   if (!tiles.length) return null;
   return (
-    <div className="pf-hl-grid">
+    <div className="pf-hl">
       {tiles.map((t, i) => (
         <div key={i} className={"pf-hl-t " + t.tone}>
-          <div className="pf-hl-k">{t.kicker}</div>
-          <div className="pf-hl-v">{t.label}</div>
-          <div className="pf-hl-s">{t.value}</div>
+          <span>{t.tone === "pos" ? "▲" : "▼"}</span>
+          <div>{t.kicker}</div>
+          <b>{t.label}</b>
+          <em>{t.value}</em>
         </div>
       ))}
     </div>
@@ -1325,11 +1371,21 @@ export default function Performance({ onBack } = {}) {
               <div className="pf-sum-head">
                 <div>
                   <div className="pf-sum-k">Where the month pays</div>
-                  <div className="pf-sum-s">share of P&amp;L by week</div>
+                  <div className="pf-sum-s">by week</div>
                 </div>
               </div>
 
-              <ShareDonut items={weekData.rows.map((r) => ({ id: r.id, label: r.label + " · " + (r.n || 0) + "d", value: r.n ? r.net : 0 }))} center={fmt(weekData.total)} centerSub={"total"} fmt={fmt} />
+              <ShareDonut
+                items={weekData.rows.map((r) => ({
+                  id: r.id,
+                  label: r.label,
+                  sub: r.n + (r.n === 1 ? " day" : " days"),
+                  value: r.n ? r.net : 0,
+                }))}
+                center={fmt(weekData.total)}
+                centerSub={"total"}
+                fmt={fmt}
+              />
 
               {weekData.months < 3 && (
                 <div className="pf-sum-small">Small sample · {weekData.months} {weekData.months === 1 ? "month" : "months"}</div>
@@ -1385,19 +1441,16 @@ export default function Performance({ onBack } = {}) {
             <h2 className="pf-section" style={{ marginTop: 22 }}>Half-hour heat<span className="pf-sub">11:00 &ndash; 17:00</span></h2>
             <div className="pf-card"><SlotChart slots={timeData.slots} fmt={fmt} /></div>
 
-            <div className="pf-card">
-              <div className="pf-sum-head">
-                <div>
-                  <div className="pf-sum-k">Where the day pays</div>
-                  <div className="pf-sum-s">share of P&amp;L by block</div>
-                </div>
-              </div>
-
-              <ShareDonut items={timeData.blocks.map((b) => ({ id: b.id, label: b.short + " · " + b.trades + " trades", value: b.trades ? b.net : 0 }))} center={fmt(timeNet)} centerSub={"total"} fmt={fmt} />
-
-              {timeData.counted < 20 && (
-                <div className="pf-sum-small">Small sample · {timeData.counted} timed {timeData.counted === 1 ? "trade" : "trades"}</div>
-              )}
+            <div className="pf-card pf-pie-card">
+              <div className="pf-pie-h"><b>Where the day pays</b><span>by trading block</span></div>
+              <ShareDonut
+                fmt={fmt}
+                center={fmt(timeNet)}
+                centerSub="net"
+                items={timeData.blocks.map((b) => ({ id: b.id, label: b.short, sub: b.trades + (b.trades === 1 ? " trade" : " trades"), value: b.trades ? b.net : 0 }))}
+              />
+              <HighLow tiles={timeTiles} />
+              {timeData.counted < 20 && <div className="pf-pie-note">Small sample · {timeData.counted} timed {timeData.counted === 1 ? "trade" : "trades"}</div>}
             </div>
           </>
         )}
@@ -1776,32 +1829,61 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 }
 @media (max-width:340px){.pf-report-actions{grid-template-columns:1fr;}}
 
-/* ================= visual summaries ================= */
-.pf-vis{margin-top:12px;padding:16px;}
-.pf-vis-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:12px;}
-.pf-vis-h b{font-size:14px;font-weight:800;letter-spacing:-.01em;}
-.pf-vis-h span{font-size:11px;font-weight:600;color:var(--muted);}
+/* ================= donut summaries ================= */
+.pf-pie-card{margin-top:12px;padding:18px 16px 16px;}
+.pf-pie-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:14px;}
+.pf-pie-h b{font-size:15px;font-weight:800;letter-spacing:-.01em;}
+.pf-pie-h span{font-size:11px;font-weight:700;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-pill);padding:3px 10px;}
+.pf-pie{display:flex;flex-direction:column;align-items:center;gap:16px;}
+.pf-pie-empty{padding:26px 0;text-align:center;font-size:12.5px;color:var(--muted);}
 
-.pf-dn{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center;}
-.pf-dn-svg{width:150px;height:150px;flex:none;}
-.pf-dn-leg{flex:1;min-width:150px;display:grid;gap:8px;}
-.pf-dn-row{display:grid;grid-template-columns:10px 1fr auto;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--muted);}
-.pf-dn-row i{width:10px;height:10px;border-radius:50%;background:var(--surface-2);border:1px solid var(--border);}
-.pf-dn-row i.up{background:var(--teal);border-color:transparent;}
-.pf-dn-row i.dn{background:var(--rose);border-color:transparent;}
-.pf-dn-row b{font-size:12.5px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--text);}
-.pf-dn-row b.pos{color:var(--teal);}
-.pf-dn-row b.neg{color:var(--rose);}
+.pf-pie-ring{position:relative;width:200px;height:200px;flex:none;}
+.pf-pie-ring svg{display:block;width:100%;height:100%;filter:drop-shadow(0 10px 18px rgba(0,0,0,.18));}
+.pf-pie-mid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none;padding:0 46px;}
+.pf-pie-mid-k{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pf-pie-mid b{font-size:21px;font-weight:800;letter-spacing:-.03em;line-height:1.15;margin:3px 0 2px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.pf-pie-mid-s{font-size:10px;font-weight:600;color:var(--muted);}
 
-.pf-hl{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px;}
-.pf-hl-t{border-radius:16px;padding:10px 12px;border:1px solid var(--border);background:var(--surface-2);min-width:0;}
-.pf-hl-t span{display:block;font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;}
-.pf-hl-t b{display:block;font-size:14px;font-weight:800;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.pf-hl-t em{display:block;font-style:normal;font-size:12.5px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums;}
+.pf-pie-list{width:100%;display:grid;gap:6px;}
+.pf-pie-row{display:grid;grid-template-columns:12px 1fr auto auto;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;border-radius:14px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);cursor:pointer;transition:border-color .18s ease,transform .18s ease,background .18s ease;}
+.pf-pie-row:hover,.pf-pie-row.on{border-color:var(--amber);transform:translateX(2px);}
+.pf-pie-row.off{opacity:.5;}
+.pf-pie-row i{width:12px;height:12px;border-radius:50%;box-shadow:0 0 0 3px var(--surface-2);}
+.pf-pie-name{display:flex;flex-direction:column;min-width:0;}
+.pf-pie-name b{font-size:13px;font-weight:800;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pf-pie-name em{font-style:normal;font-size:10.5px;font-weight:600;color:var(--muted);}
+.pf-pie-pct{font-size:11.5px;font-weight:800;color:var(--muted);font-variant-numeric:tabular-nums;min-width:32px;text-align:right;}
+.pf-pie-val{font-size:12.5px;font-weight:800;font-variant-numeric:tabular-nums;min-width:84px;text-align:right;white-space:nowrap;}
+.pf-pie-val.pos{color:var(--teal);}
+.pf-pie-val.neg{color:var(--rose);}
+
+.pf-pie-key{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 14px;font-size:10.5px;font-weight:700;color:var(--muted);}
+.pf-pie-key span{display:inline-flex;align-items:center;gap:6px;}
+.pf-pie-key i{width:14px;height:4px;border-radius:4px;display:inline-block;}
+.pf-pie-key i.up{background:var(--teal);}
+.pf-pie-key i.dn{background:var(--rose);}
+
+.pf-hl-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px;}
+.pf-hl-t{display:flex;align-items:center;gap:10px;border-radius:16px;padding:10px 12px;border:1px solid var(--border);background:var(--surface-2);min-width:0;}
+.pf-hl-ic{flex:none;width:28px;height:28px;border-radius:10px;display:grid;place-items:center;font-size:11px;font-weight:800;}
+.pf-hl-tx{min-width:0;}
+.pf-hl-k{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+.pf-hl-v{font-size:13.5px;font-weight:800;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;}
+.pf-hl-s{font-size:12px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:1px;}
 .pf-hl-t.pos{background:var(--teal-dim);border-color:transparent;}
-.pf-hl-t.pos em{color:var(--teal);}
+.pf-hl-t.pos .pf-hl-ic{background:var(--teal);color:#06281a;}
+.pf-hl-t.pos .pf-hl-s{color:var(--teal);}
 .pf-hl-t.neg{background:var(--rose-dim);border-color:transparent;}
-.pf-hl-t.neg em{color:var(--rose);}
+.pf-hl-t.neg .pf-hl-ic{background:var(--rose);color:#fff;}
+.pf-hl-t.neg .pf-hl-s{color:var(--rose);}
 
-.pf-note{display:inline-block;margin-top:12px;font-size:10.5px;font-weight:700;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-pill);padding:4px 10px;}
+.pf-pie-note{display:table;margin:14px auto 0;font-size:10.5px;font-weight:700;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-pill);padding:4px 11px;}
+
+@media (max-width:420px){
+  .pf-pie-ring{width:180px;height:180px;}
+  .pf-pie-mid{padding:0 40px;}
+  .pf-pie-mid b{font-size:18px;}
+  .pf-pie-val{min-width:74px;font-size:12px;}
+  .pf-hl-grid{grid-template-columns:1fr;}
+}
 `;
