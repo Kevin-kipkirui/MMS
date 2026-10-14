@@ -328,24 +328,6 @@ export default function NoteEditor({ note, sections, onCommit, onToast, onOpenIm
 
   const numbers = useMemo(() => numberBlocks(draft.blocks), [draft.blocks]);
 
-  const blockList = draft.blocks.map((b, index) => (
-    <BlockRow
-      key={b.id}
-      block={b}
-      index={index}
-      numberLabel={numbers[b.id]}
-      registerRef={registerRef}
-      onChange={changeText}
-      onKeyDown={handleKeyDown}
-      onFocus={setActiveId}
-      onToggle={(id) =>
-        setBlocks((bs) => bs.map((x) => (x.id === id ? { ...x, checked: !x.checked } : x)))
-      }
-      onRemoveDivider={(id) => setBlocks((bs) => bs.filter((x) => x.id !== id))}
-      active={b.id === activeId}
-    />
-  ));
-
   return (
     <>
       <div className="np-scroll">

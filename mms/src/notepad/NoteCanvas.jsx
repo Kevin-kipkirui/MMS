@@ -1,5 +1,5 @@
 import React from "react";
-import { ChevronLeft, Pin, PinOff, Pencil, Check, Trash2, NotebookPen } from "lucide-react";
+import { ChevronLeft, Pin, PinOff, Pencil, Check, Trash2 } from "lucide-react";
 import NoteView from "./NoteView.jsx";
 import NoteEditor from "./NoteEditor.jsx";
 
@@ -59,10 +59,6 @@ export default function NoteCanvas({
         <button type="button" className="np-icon-btn" aria-label="Delete note" onClick={onDelete}>
           <Trash2 size={16} />
         </button>
-
-        <button type="button" className="np-icon-btn" aria-label="Create note" onClick={onCommit}>
-          <NotebookPen size={16} />
-        </button>
       </div>
 
       <div className="np-edit">
@@ -70,9 +66,8 @@ export default function NoteCanvas({
           <NoteEditor
             note={note}
             sections={sections}
+            onCommit={onCommit}
             onToast={onToast}
-            onDone={onDone}
-            onDelete={onDelete}
             onOpenImage={onOpenImage}
           />
         ) : (

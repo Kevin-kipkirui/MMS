@@ -9,9 +9,13 @@ export function useAutosave(value, onCommit, { delay = 700 } = {}) {
   cb.current = onCommit;
 
   const flush = useCallback(() => {
-    if (latest.current !== saved.current) {
-      saved.current = latest.current;
-      cb.current(latest.current);
+    if (latest.current === saved.current) return;
+    const toSave = latest.current;
+    try {
+      cb.current(toSave);
+      saved.current = toSave; // only mark saved after the commit succeeds
+    } catch (e) {
+      console.error("Autosave failed:", e);
     }
   }, []);
 

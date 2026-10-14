@@ -129,6 +129,21 @@ const MIN_IMPACT_OPTIONS = [
 const BE_LIMIT = 10;
 const isBreakEven = (v) => Math.abs(v) < BE_LIMIT;
 
+// ---------- day breakdown helpers ----------
+const fmtClock = (m) => (m == null ? "--:--" : pad(Math.floor(m / 60)) + ":" + pad(m % 60));
+
+// Which trading block a trade belongs to, based on the minute it was logged
+function blockNameFor(m) {
+  if (m == null) return "Time not recorded";
+  const b = ALL_BLOCKS.find((x) => x.type === "trade" && m >= x.start && m < x.end);
+  return b ? b.label.replace(/^\S+\s/, "") : "Outside trading blocks"; // strips the 🎯 emoji
+}
+
+function getDayTrades(entry) {
+  if (!entry || !Array.isArray(entry.trades)) return [];
+  return entry.trades.map((t) => ({ v: Number(t.v) || 0, m: t.m != null ? t.m : null }));
+}
+
 function toMin(hhmm) {
   const p = (hhmm || "").split(":");
   return p.length === 2 && !isNaN(p[0]) && !isNaN(p[1]) ? Number(p[0]) * 60 + Number(p[1]) : null;
@@ -351,6 +366,131 @@ function Ring({ pct, met, neg }) {
         {Math.round(pct)}%
       </text>
     </svg>
+  );
+}
+
+// ---------- history: per-day equity curve ----------
+function DayChart({ trades, maxLoss }) {
+  const W = 320, H = 150, padL = 10, padR = 10, padT = 14, padB = 22;
+
+  const pts = [0];
+  trades.forEach((t) => pts.push(pts[pts.length - 1] + t.v));
+
+  let lo = Math.min(...pts, 0);
+  let hi = Math.max(...pts, 0);
+  const showFloor = maxLoss > 0 && lo <= -maxLoss * 0.5; // only draw the floor if the day came near it
+  if (showFloor) lo = Math.min(lo, -maxLoss);
+  const span = hi - lo || 1;
+
+  const x = (i) => padL + (i / (pts.length - 1)) * (W - padL - padR);
+  const y = (v) => padT + ((hi - v) / span) * (H - padT - padB);
+
+  const line = pts.map((v, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1)).join(" ");
+  const last = pts.length - 1;
+  const area = `${line} L${x(last).toFixed(1)} ${y(0).toFixed(1)} L${x(0).toFixed(1)} ${y(0).toFixed(1)} Z`;
+  const up = pts[last] >= 0;
+  const color = up ? "var(--teal)" : "var(--rose)";
+  const showNums = pts.length <= 13;
+
+  return (
+    <div className="ddchart">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Cumulative profit and loss through the day">
+        {/* zero baseline */}
+        <line x1={padL} x2={W - padR} y1={y(0)} y2={y(0)} style={{ stroke: "var(--border)", strokeWidth: 1, strokeDasharray: "4 4" }} />
+        {/* loss floor */}
+        {showFloor && (
+          <line x1={padL} x2={W - padR} y1={y(-maxLoss)} y2={y(-maxLoss)} style={{ stroke: "var(--rose)", strokeWidth: 1, strokeDasharray: "2 4", opacity: 0.6 }} />
+        )}
+        <path d={area} style={{ fill: color, opacity: 0.12 }} />
+        <path d={line} fill="none" style={{ stroke: color, strokeWidth: 2.2, strokeLinecap: "round", strokeLinejoin: "round" }} />
+        {pts.map((v, i) => {
+          if (i === 0) return <circle key={i} cx={x(i)} cy={y(v)} r="2.5" style={{ fill: "var(--muted)" }} />;
+          const tv = trades[i - 1].v;
+          const dot = isBreakEven(tv) ? "var(--warn)" : tv > 0 ? "var(--teal)" : "var(--rose)";
+          return <circle key={i} cx={x(i)} cy={y(v)} r="4" style={{ fill: dot, stroke: "var(--modal-bg)", strokeWidth: 1.5 }} />;
+        })}
+        {showNums &&
+          pts.map((_, i) => (
+            <text key={i} x={x(i)} y={H - 6} textAnchor="middle" style={{ fill: "var(--muted)", fontSize: 9, fontWeight: 600 }}>
+              {i === 0 ? "Open" : i}
+            </text>
+          ))}
+      </svg>
+    </div>
+  );
+}
+
+// ---------- history: change vs previous day + chart + trade list ----------
+function DayBreakdown({ entry, history, fmt }) {
+  const trades = useMemo(() => getDayTrades(entry), [entry]);
+
+  const prev = useMemo(() => {
+    const earlier = history
+      .filter((h) => h.date < entry.date)
+      .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+    if (!earlier) return null;
+    const net = entry.net ?? 0;
+    const prevNet = earlier.net ?? 0;
+    const diff = net - prevNet;
+    return { date: earlier.date, prevNet, diff, pct: prevNet === 0 ? null : (diff / Math.abs(prevNet)) * 100 };
+  }, [entry, history]);
+
+  let running = 0;
+
+  return (
+    <>
+      <div className="ddchange">
+        {prev ? (
+          <>
+            <span className={`ddchange-pill${prev.diff > 0 ? " up" : prev.diff < 0 ? " down" : ""}`}>
+              {prev.diff > 0 ? "▲" : prev.diff < 0 ? "▼" : "•"}{" "}
+              {prev.pct === null ? "n/a" : (prev.pct > 0 ? "+" : "") + prev.pct.toFixed(1) + "%"}
+            </span>
+            <span className="ddchange-txt">
+              {fmt(prev.diff)} vs{" "}
+              {new Date(prev.date + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}{" "}
+              ({fmt(prev.prevNet)})
+            </span>
+          </>
+        ) : (
+          <span className="ddchange-txt">First logged day, nothing to compare against yet.</span>
+        )}
+      </div>
+
+      {trades.length > 0 ? (
+        <>
+          <div className="ddlabel">How the day progressed</div>
+          <DayChart trades={trades} maxLoss={entry.maxLoss} />
+
+          <div className="ddlabel">Every trade</div>
+          <div className="ddtrades">
+            <div className="ddtrade head">
+              <span>#</span>
+              <span>Block</span>
+              <span>P&amp;L</span>
+              <span>Running</span>
+            </div>
+            {trades.map((t, i) => {
+              running += t.v;
+              const cls = isBreakEven(t.v) ? "be" : t.v > 0 ? "win" : "loss";
+              return (
+                <div className="ddtrade" key={i}>
+                  <span className="ddt-n">{i + 1}</span>
+                  <span className="ddt-meta">
+                    <span className="ddt-time">{fmtClock(t.m)}</span>
+                    <span className="ddt-block">{blockNameFor(t.m)}</span>
+                  </span>
+                  <span className={`ddt-val ${cls}`}>{fmt(t.v)}</span>
+                  <span className="ddt-run">{fmt(running)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <div className="ddnews">Individual trades weren't stored for this day.</div>
+      )}
+    </>
   );
 }
 
@@ -2254,6 +2394,8 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
                 <div className="ddstat"><div className="v">{activeHistEntry.missed ?? 0}</div><div className="l">missed</div></div>
               </div>
 
+              <DayBreakdown entry={activeHistEntry} history={fullHistory} fmt={fmt} />
+
               {activeHistEntry.note && (
                 <>
                   <div className="ddlabel">Notes</div>
@@ -3075,5 +3217,30 @@ overflow:visible;
 .ts-root .ts-menu.open .ts-menu-hamburger span:nth-child(1){transform:translateY(6px) rotate(45deg);}
 .ts-root .ts-menu.open .ts-menu-hamburger span:nth-child(2){opacity:0;transform:scaleX(.2);}
 .ts-root .ts-menu.open .ts-menu-hamburger span:nth-child(3){transform:translateY(-6px) rotate(-45deg);}
+
+/* ---------- history: day breakdown ---------- */
+.ts-root .ddchange{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:2px 0 4px;padding:10px 12px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);}
+.ts-root .ddchange-pill{font-size:12.5px;font-weight:800;font-variant-numeric:tabular-nums;padding:4px 10px;border-radius:var(--r-pill);background:var(--surface-2);border:1px solid var(--border);color:var(--muted);}
+.ts-root .ddchange-pill.up{color:var(--teal);background:var(--teal-dim);border-color:var(--teal);}
+.ts-root .ddchange-pill.down{color:var(--rose);background:var(--rose-dim);border-color:var(--rose);}
+.ts-root .ddchange-txt{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;}
+
+.ts-root .ddchart{border-radius:16px;background:var(--surface-2);border:1px solid var(--border);padding:10px 8px 4px;}
+.ts-root .ddchart svg{display:block;width:100%;height:auto;}
+
+.ts-root .ddtrades{border:1px solid var(--border);border-radius:16px;overflow:hidden;background:var(--surface-2);}
+.ts-root .ddtrade{display:grid;grid-template-columns:28px 1fr auto 78px;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;font-variant-numeric:tabular-nums;}
+.ts-root .ddtrade:last-child{border-bottom:none;}
+.ts-root .ddtrade.head{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 12px;}
+.ts-root .ddtrade.head span:nth-child(3),.ts-root .ddtrade.head span:nth-child(4),.ts-root .ddt-run{text-align:right;}
+.ts-root .ddt-n{font-weight:700;color:var(--muted);}
+.ts-root .ddt-meta{display:flex;flex-direction:column;min-width:0;}
+.ts-root .ddt-time{font-weight:700;}
+.ts-root .ddt-block{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ts-root .ddt-val{font-weight:800;}
+.ts-root .ddt-val.win{color:var(--teal);}
+.ts-root .ddt-val.loss{color:var(--rose);}
+.ts-root .ddt-val.be{color:var(--warn);}
+.ts-root .ddt-run{font-size:12px;color:var(--muted);font-weight:600;}
 
 `;
