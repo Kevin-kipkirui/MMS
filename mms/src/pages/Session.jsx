@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabase";
 import { pullAll, pushSettings, pushDay, pushHistory } from "../lib/sync";
 import { useFeed, normalizeImpact, flagCodeFor, flagUrl, FLAG_CODE } from "../components/News";
 import { get as idbGet, set as idbSet } from "idb-keyval";
+import { setShotUser, uploadShot, fetchShotUrl, removeShot } from "../lib/firebase";
 
 /**
  * <Session />
@@ -83,23 +84,57 @@ function compressImage(file, maxDim = 1100, quality = 0.72) {
   });
 }
 
-// ---------- per-trade photos (IndexedDB) ----------
+// ---------- per-trade photos (device cache + Firebase Storage) ----------
 const SHOT_PREFIX = "td_shot_";
+const SHOT_QUEUE = "td_shotq";
 
 async function saveShot(id, dataUrl) {
+  let local = false;
   try {
-    await idbSet(SHOT_PREFIX + id, dataUrl);
-    return true;
+    await idbSet(SHOT_PREFIX + id, dataUrl); // instant, works offline
+    local = true;
   } catch (e) {
-    return false;
+    /* fall through to cloud-only */
   }
+  const up = uploadShot(id, dataUrl).catch((e) => {
+    if (local) {
+      const q = readLS(SHOT_QUEUE, []);
+      if (!q.includes(id)) writeLS(SHOT_QUEUE, [...q, id]); // retry later
+    }
+    throw e;
+  });
+  if (!local) return up.then(() => true, () => false);
+  up.catch(() => {}); // background upload; the queue handles failures
+  return true;
 }
+
 async function loadShot(id) {
   try {
-    return (await idbGet(SHOT_PREFIX + id)) || null;
+    const v = await idbGet(SHOT_PREFIX + id);
+    if (v) return v;
+  } catch (e) {
+    /* ignore */
+  }
+  try {
+    return await fetchShotUrl(id); // photo taken on another device
   } catch (e) {
     return null;
   }
+}
+
+async function flushShotQueue() {
+  const q = readLS(SHOT_QUEUE, []);
+  if (!q.length) return;
+  const left = [];
+  for (const id of q) {
+    try {
+      const v = await idbGet(SHOT_PREFIX + id);
+      if (v) await uploadShot(id, v);
+    } catch (e) {
+      left.push(id);
+    }
+  }
+  writeLS(SHOT_QUEUE, left);
 }
 
 function useLocalStorageState(key, initialValue) {
@@ -391,29 +426,49 @@ function Ring({ pct, met, neg }) {
 
 // ---------- trade photo: attach button, preview, history thumbnail ----------
 function ShotButton({ hasShot, busy, disabled, onPick }) {
-  const inputRef = useRef(null);
+  const camRef = useRef(null);
+  const fileRef = useRef(null);
+  const handle = (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (f) onPick(f);
+  };
   return (
     <>
       <input
-        ref={inputRef}
+        ref={camRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        hidden
+        onChange={handle}
+      />
+      <input
+        ref={fileRef}
         type="file"
         accept="image/*"
         hidden
-        onChange={(e) => {
-          const f = e.target.files && e.target.files[0];
-          e.target.value = "";
-          if (f) onPick(f);
-        }}
+        onChange={handle}
       />
       <button
         type="button"
         className={`shotbtn${hasShot ? " on" : ""}`}
         disabled={disabled || busy}
-        aria-label={hasShot ? "Replace trade photo" : "Add trade photo"}
-        title={hasShot ? "Replace photo" : "Add a photo of this trade"}
-        onClick={() => inputRef.current && inputRef.current.click()}
+        aria-label="Take a photo"
+        title="Take a photo"
+        onClick={() => camRef.current && camRef.current.click()}
       >
-        {busy ? "…" : hasShot ? "↻" : "+"}
+        {busy ? "…" : "📷"}
+      </button>
+      <button
+        type="button"
+        className={`shotbtn${hasShot ? " on" : ""}`}
+        disabled={disabled || busy}
+        aria-label={hasShot ? "Replace with an uploaded photo" : "Upload a photo"}
+        title={hasShot ? "Replace from gallery" : "Upload from gallery"}
+        onClick={() => fileRef.current && fileRef.current.click()}
+      >
+        {hasShot ? "↻" : "🖼"}
       </button>
     </>
   );
@@ -1291,6 +1346,16 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
   const pushedHist = useRef({});
   const dayDate = dayKey.slice("td_day_".length);
 
+  // point photo storage at the signed-in user, and retry any uploads that failed offline
+  useEffect(() => {
+    setShotUser(userId);
+    if (!userId) return;
+    flushShotQueue();
+    const onOnline = () => flushShotQueue();
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [userId]);
+
   // retry when the connection comes back
   useEffect(() => {
     const onOnline = () => setRetryTick((t) => t + 1);
@@ -1815,6 +1880,8 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
   };
 
   const removeResult = (idx) => {
+    const shotId = day.shots && day.shots[idx];
+    if (shotId) removeShot(shotId).catch(() => {});
     setDay((d) => ({
       ...d,
       pnl: d.pnl.filter((_, i) => i !== idx),
@@ -3407,7 +3474,7 @@ overflow:visible;
 .ts-root .ddt-run{font-size:12px;color:var(--muted);font-weight:600;}
 
 /* ---------- trade photos ---------- */
-.ts-root .shotbtn,.ts-root .pnl-entry .shotbtn{flex-shrink:0;width:44px;height:auto;min-height:40px;display:grid;place-items:center;padding:0;border-radius:14px;border:1px solid var(--border);background:var(--surface-2);color:var(--muted);cursor:pointer;box-shadow:none;transition:all .18s ease;}
+.ts-root .shotbtn,.ts-root .pnl-entry .shotbtn{flex-shrink:0;width:40px;height:auto;min-height:40px;display:grid;place-items:center;padding:0;border-radius:14px;border:1px solid var(--border);background:var(--surface-2);color:var(--muted);cursor:pointer;box-shadow:none;transition:all .18s ease;}
 .ts-root .shotbtn:hover{border-color:var(--amber);color:var(--text);}
 .ts-root .shotbtn.on,.ts-root .pnl-entry .shotbtn.on{border-color:var(--amber);background:var(--amber-dim);color:var(--text);}
 .ts-root .shotbtn:disabled{opacity:.4;cursor:default;}

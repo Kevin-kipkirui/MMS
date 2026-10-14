@@ -8,6 +8,7 @@
     "start": "npm --prefix ./mms run preview -- --host 0.0.0.0"
   },
   "dependencies": {
+    "firebase": "^13.0.0",
     "react-is": "^19.3.0",
     "recharts": "^3.10.1"
   }
