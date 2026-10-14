@@ -3,6 +3,7 @@ import Login from "./Login";
 import { supabase } from "../lib/supabase";
 import { pullAll, pushSettings, pushDay, pushHistory } from "../lib/sync";
 import { useFeed, normalizeImpact, flagCodeFor, flagUrl, FLAG_CODE } from "../components/News";
+import { get as idbGet, set as idbSet } from "idb-keyval";
 
 /**
  * <Session />
@@ -82,6 +83,25 @@ function compressImage(file, maxDim = 1100, quality = 0.72) {
   });
 }
 
+// ---------- per-trade photos (IndexedDB) ----------
+const SHOT_PREFIX = "td_shot_";
+
+async function saveShot(id, dataUrl) {
+  try {
+    await idbSet(SHOT_PREFIX + id, dataUrl);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+async function loadShot(id) {
+  try {
+    return (await idbGet(SHOT_PREFIX + id)) || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 function useLocalStorageState(key, initialValue) {
   const [state, setState] = useState(() => readLS(key, initialValue));
   useEffect(() => {
@@ -141,7 +161,7 @@ function blockNameFor(m) {
 
 function getDayTrades(entry) {
   if (!entry || !Array.isArray(entry.trades)) return [];
-  return entry.trades.map((t) => ({ v: Number(t.v) || 0, m: t.m != null ? t.m : null }));
+  return entry.trades.map((t) => ({ v: Number(t.v) || 0, m: t.m != null ? t.m : null, s: t.s || null }));
 }
 
 function toMin(hhmm) {
@@ -369,6 +389,78 @@ function Ring({ pct, met, neg }) {
   );
 }
 
+// ---------- trade photo: attach button, preview, history thumbnail ----------
+function ShotButton({ hasShot, busy, disabled, onPick }) {
+  const inputRef = useRef(null);
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files && e.target.files[0];
+          e.target.value = "";
+          if (f) onPick(f);
+        }}
+      />
+      <button
+        type="button"
+        className={`shotbtn${hasShot ? " on" : ""}`}
+        disabled={disabled || busy}
+        aria-label={hasShot ? "Replace trade photo" : "Add trade photo"}
+        title={hasShot ? "Replace photo" : "Add a photo of this trade"}
+        onClick={() => inputRef.current && inputRef.current.click()}
+      >
+        {busy ? "…" : hasShot ? "↻" : "+"}
+      </button>
+    </>
+  );
+}
+
+function ShotPreview({ shot, err, onClear }) {
+  if (!shot && !err) return null;
+  return (
+    <div className="shot-preview">
+      {shot && <img src={shot} alt="Photo that will be attached to this trade" className="shot-preview-img" />}
+      <span className={err ? "err" : ""}>{err || "Photo will be saved with this trade when you log it."}</span>
+      {shot && (
+        <button type="button" className="shot-clear" onClick={onClear} aria-label="Remove trade photo">
+          ×
+        </button>
+      )}
+    </div>
+  );
+}
+
+function TradeShot({ id, onOpen }) {
+  const [src, setSrc] = useState(null);
+  const [missing, setMissing] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    setSrc(null);
+    setMissing(false);
+    loadShot(id).then((v) => {
+      if (!live) return;
+      if (v) setSrc(v);
+      else setMissing(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, [id]);
+
+  if (missing) return null;
+  if (!src) return null;
+  return (
+    <button type="button" className="ddt-shot" onClick={() => onOpen(src)} aria-label="View trade photo">
+      <img src={src} alt="Trade" />
+    </button>
+  );
+}
+
 // ---------- history: per-day equity curve ----------
 function DayChart({ trades, maxLoss }) {
   const W = 320, H = 150, padL = 10, padR = 10, padT = 14, padB = 22;
@@ -421,8 +513,9 @@ function DayChart({ trades, maxLoss }) {
 }
 
 // ---------- history: change vs previous day + chart + trade list ----------
-function DayBreakdown({ entry, history, fmt }) {
+function DayBreakdown({ entry, history, fmt, onOpenImage }) {
   const trades = useMemo(() => getDayTrades(entry), [entry]);
+  const hasShots = trades.some((t) => t.s);
 
   const prev = useMemo(() => {
     const earlier = history
@@ -463,12 +556,13 @@ function DayBreakdown({ entry, history, fmt }) {
           <DayChart trades={trades} maxLoss={entry.maxLoss} />
 
           <div className="ddlabel">Every trade</div>
-          <div className="ddtrades">
+          <div className={`ddtrades${hasShots ? " with-shots" : ""}`}>
             <div className="ddtrade head">
               <span>#</span>
               <span>Block</span>
               <span>P&amp;L</span>
               <span>Running</span>
+              {hasShots && <span />}
             </div>
             {trades.map((t, i) => {
               running += t.v;
@@ -482,6 +576,9 @@ function DayBreakdown({ entry, history, fmt }) {
                   </span>
                   <span className={`ddt-val ${cls}`}>{fmt(t.v)}</span>
                   <span className="ddt-run">{fmt(running)}</span>
+                  {hasShots && (
+                    <span className="ddt-photo">{t.s ? <TradeShot id={t.s} onOpen={onOpenImage} /> : null}</span>
+                  )}
                 </div>
               );
             })}
@@ -507,6 +604,7 @@ function FocusCard({
   block, done, onToggle, isTrade, isEnergy, energy, onEnergy,
   pnlInputRef, pnlInput, setPnlInput, addResult,
   netPnl, maxLoss, fmt, money, usedFraction,
+  pendingShot, shotBusy, shotErr, onPickShot, onClearShot,
 }) {
   return (
     <div className="ts-focus-enter ts-glass" style={{ borderRadius: "26px", padding: "18px", marginBottom: "10px" }}>
@@ -563,6 +661,7 @@ function FocusCard({
                 color: "var(--text)",
               }}
             />
+            <ShotButton hasShot={!!pendingShot} busy={shotBusy} onPick={onPickShot} />
             <button
               onClick={addResult}
               style={{
@@ -580,6 +679,7 @@ function FocusCard({
               Log
             </button>
           </div>
+          <ShotPreview shot={pendingShot} err={shotErr} onClear={onClearShot} />
           <div style={{ height: "8px", borderRadius: "999px", background: "var(--surface-2)", overflow: "hidden", marginBottom: "8px" }}>
             <div
               style={{
@@ -1171,6 +1271,9 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
   const [goalCelebrated, setGoalCelebrated] = useLocalStorageState("td_goalCelebrated_" + todayKey(), false);
   const [goalEvaluated, setGoalEvaluated] = useLocalStorageState("td_goalEvaluated_" + todayKey(), false);
   const [goalPopup, setGoalPopup] = useState(null);
+  const [pendingShot, setPendingShot] = useState(null); // photo waiting to be attached to the next logged trade
+  const [shotBusy, setShotBusy] = useState(false);
+  const [shotErr, setShotErr] = useState("");
 
   const pnlInputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -1652,27 +1755,71 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
     }
   };
 
-  const addResult = () => {
+  const onPickShot = async (file) => {
+    if (!file.type.startsWith("image/")) {
+      setShotErr("Please choose an image file.");
+      return;
+    }
+    setShotBusy(true);
+    setShotErr("");
+    try {
+      setPendingShot(await compressImage(file, 1000, 0.7));
+    } catch (e) {
+      setShotErr("Couldn't read that image.");
+    }
+    setShotBusy(false);
+  };
+
+  const clearShot = () => {
+    setPendingShot(null);
+    setShotErr("");
+  };
+
+  const openShot = async (id) => {
+    const src = await loadShot(id);
+    if (src) setLightbox(src);
+  };
+
+  const addResult = async () => {
     if (weekend) return;
     const v = parseFloat(pnlInput);
     if (isNaN(v) || v === 0) { pnlInputRef.current?.focus(); return; }
     const stamp = new Date();
     const minuteOfDay = stamp.getHours() * 60 + stamp.getMinutes();
+
+    // store the photo first so the trade only ever points at an image that exists
+    let shotId = null;
+    if (pendingShot) {
+      const id = newId();
+      if (await saveShot(id, pendingShot)) {
+        shotId = id;
+      } else {
+        setShotErr("Trade logged, but the photo couldn't be stored on this device.");
+        setTimeout(() => setShotErr(""), 4000);
+      }
+    }
+
     setDay((d) => {
       const times = (d.times || []).slice();
       while (times.length < d.pnl.length) times.push(null); // pad older trades logged before timestamps existed
       times.push(minuteOfDay);
-      return { ...d, pnl: [...d.pnl, v], times };
+      const shots = (d.shots || []).slice();
+      while (shots.length < d.pnl.length) shots.push(null); // pad older trades logged before photos existed
+      shots.push(shotId);
+      return { ...d, pnl: [...d.pnl, v], times, shots };
     });
     setPnlInput("");
+    setPendingShot(null);
     if (!scrollToNow(true)) pnlInputRef.current?.focus();
     else setTimeout(() => pnlInputRef.current?.blur(), 60);
   };
+
   const removeResult = (idx) => {
     setDay((d) => ({
       ...d,
       pnl: d.pnl.filter((_, i) => i !== idx),
       times: (d.times || []).filter((_, i) => i !== idx),
+      shots: (d.shots || []).filter((_, i) => i !== idx),
     }));
   };
 
@@ -1720,7 +1867,11 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
     news: todaysNews.map((n) => ({ time: n.time, title: n.title, impact: n.impact })),
     note: logForm.note.trim(),
     stoppedOnTime: !!day.checks["eod"],
-    trades: day.pnl.map((v, i) => ({ v, m: day.times && day.times[i] != null ? day.times[i] : null })),
+    trades: day.pnl.map((v, i) => ({
+      v,
+      m: day.times && day.times[i] != null ? day.times[i] : null,
+      s: day.shots && day.shots[i] ? day.shots[i] : null,
+    })),
   });
 
   const commitEntry = (entry) => {
@@ -1777,7 +1928,9 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
       const already = history.some((h) => h.date === todayKey());
       if (!already) commitEntry(buildEntry());
     }
-    setDay({ checks: {}, energy: null, pnl: [], times: [], news: [] });
+    setDay({ checks: {}, energy: null, pnl: [], times: [], shots: [], news: [] });
+    setPendingShot(null);
+    setShotErr("");
     setLogForm({ missed: "", note: "" });
     setAlerted([]);
     setGoalCelebrated(false);
@@ -1988,8 +2141,10 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
                 onChange={(e) => setPnlInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addResult(); } }}
               />
+              <ShotButton hasShot={!!pendingShot} busy={shotBusy} disabled={weekend} onPick={onPickShot} />
               <button onClick={addResult} disabled={weekend} style={weekend ? { opacity: 0.4 } : undefined}>Log result</button>
             </div>
+            <ShotPreview shot={pendingShot} err={shotErr} onClear={clearShot} />
             <div className="pnl-meter">
               <div className={`pnl-meter-fill${usedFraction >= 0.66 ? " danger" : ""}`} style={{ width: (usedFraction * 100).toFixed(1) + "%" }} />
             </div>
@@ -2016,6 +2171,9 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
                 day.pnl.map((v, i) => (
                   <span className={`chip ${isBreakEven(v) ? "be" : v > 0 ? "win" : "loss"}`} key={i}>
                     <span>{fmt(v)}</span>
+                    {day.shots && day.shots[i] && (
+                      <button aria-label="View trade photo" onClick={() => openShot(day.shots[i])}>📷</button>
+                    )}
                     <button aria-label={"Remove result " + fmt(v)} onClick={() => removeResult(i)}>&times;</button>
                   </span>
                 ))
@@ -2210,6 +2368,11 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
               fmt={fmt}
               money={money}
               usedFraction={usedFraction}
+              pendingShot={pendingShot}
+              shotBusy={shotBusy}
+              shotErr={shotErr}
+              onPickShot={onPickShot}
+              onClearShot={clearShot}
             />
           ) : (
             <NextUpCard key="nextup" nextBlock={nextBlock} minsUntil={nextBlock ? nextBlock.start - nowMin : 0} weekend={weekend} />
@@ -2394,7 +2557,7 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
                 <div className="ddstat"><div className="v">{activeHistEntry.missed ?? 0}</div><div className="l">missed</div></div>
               </div>
 
-              <DayBreakdown entry={activeHistEntry} history={fullHistory} fmt={fmt} />
+              <DayBreakdown entry={activeHistEntry} history={fullHistory} fmt={fmt} onOpenImage={setLightbox} />
 
               {activeHistEntry.note && (
                 <>
@@ -3242,5 +3405,24 @@ overflow:visible;
 .ts-root .ddt-val.loss{color:var(--rose);}
 .ts-root .ddt-val.be{color:var(--warn);}
 .ts-root .ddt-run{font-size:12px;color:var(--muted);font-weight:600;}
+
+/* ---------- trade photos ---------- */
+.ts-root .shotbtn,.ts-root .pnl-entry .shotbtn{flex-shrink:0;width:44px;height:auto;min-height:40px;display:grid;place-items:center;padding:0;border-radius:14px;border:1px solid var(--border);background:var(--surface-2);color:var(--muted);cursor:pointer;box-shadow:none;transition:all .18s ease;}
+.ts-root .shotbtn:hover{border-color:var(--amber);color:var(--text);}
+.ts-root .shotbtn.on,.ts-root .pnl-entry .shotbtn.on{border-color:var(--amber);background:var(--amber-dim);color:var(--text);}
+.ts-root .shotbtn:disabled{opacity:.4;cursor:default;}
+
+.ts-root .shotprev{display:flex;align-items:center;gap:10px;margin:8px 0 12px;padding:6px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);}
+.ts-root .shotprev img{width:44px;height:44px;border-radius:10px;object-fit:cover;flex-shrink:0;}
+.ts-root .shotprev span{flex:1;min-width:0;font-size:11.5px;color:var(--muted);line-height:1.35;}
+.ts-root .shotprev span.err{color:var(--rose);}
+.ts-root .shotprev button{flex-shrink:0;width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--surface-2);color:var(--muted);cursor:pointer;font-size:16px;line-height:1;}
+.ts-root .shotprev button:hover{color:var(--text);}
+
+.ts-root .ddtrades.with-shots .ddtrade{grid-template-columns:28px 1fr auto 70px 44px;}
+.ts-root .ddt-photo{display:flex;justify-content:flex-end;}
+.ts-root .ddt-shot{width:44px;height:44px;border-radius:10px;overflow:hidden;border:1px solid var(--border);background:var(--surface-2);padding:0;display:block;cursor:zoom-in;}
+.ts-root .ddt-shot img{display:block;width:100%;height:100%;object-fit:cover;}
+.ts-root .ddt-shot.ph{display:grid;place-items:center;color:var(--muted);font-size:12px;cursor:default;}
 
 `;
