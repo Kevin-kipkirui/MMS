@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, signInAnonymously } from "firebase/auth";
 import {
-  getStorage, ref, uploadString, getDownloadURL, deleteObject, setMaxUploadRetryTime,
+  getStorage, ref, uploadString, getDownloadURL, deleteObject,
 } from "firebase/storage";
 
 const app = initializeApp({
@@ -14,7 +14,7 @@ const app = initializeApp({
 
 const auth = getAuth(app);
 const storage = getStorage(app);
-setMaxUploadRetryTime(storage, 20000); // fail fast offline so the retry queue can take over
+storage.maxUploadRetryTime = 20000; // fail fast offline so the retry queue can take over
 
 let uid = null; // your Supabase user id, used only to organise folders
 export function setShotUser(id) {
