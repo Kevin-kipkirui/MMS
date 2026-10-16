@@ -5,6 +5,7 @@ import { pullAll, pushSettings, pushDay, pushHistory } from "../lib/sync";
 import { useFeed, normalizeImpact, flagCodeFor, flagUrl, FLAG_CODE } from "../components/News";
 import { get as idbGet, set as idbSet } from "idb-keyval";
 import { setShotUser, uploadShot, fetchShotUrl, removeShot } from "../lib/firebase";
+import { loadScheduleDoc, groupSchedule, groupRange, SCHEDULE_EVENT, SCHEDULE_KEY, DEFAULT_GOAL_CHECK } from "./Settings";
 
 /**
  * <Session />
@@ -148,28 +149,34 @@ function useLocalStorageState(key, initialValue) {
 
 const M = (h, m) => h * 60 + m;
 
-const SCHEDULE = {
-  prep: [
-    { id: "review", t: "10:30–10:45", label: "📓 Previous Day Review", desc: "Yesterday's trades, screenshots, mistakes, wins, P&L.", type: "prep", start: M(10, 30), end: M(10, 45) },
-    { id: "premarket", t: "10:45–11:00", label: "🧭 Pre-Market Preparation", desc: "HTF bias, key levels, liquidity, important zones, market conditions. Set today's loss limit and trade cap now, while calm.", type: "prep", start: M(10, 45), end: M(11, 0) },
-  ],
-  session: [
-    { id: "t1", t: "11:00–12:15", label: "🎯 Trading Block 1", desc: "Execute your plan. Take only your best setups.", type: "trade", start: M(11, 0), end: M(12, 15) },
-    { id: "b1", t: "12:15–12:30", label: "☕ Break", desc: "Step away from the screen. Water, stretch, reset.", type: "rest", start: M(12, 15), end: M(12, 30) },
-    { id: "t2", t: "12:30–13:30", label: "🎯 Trading Block 2", desc: "Stay patient and stick to the plan.", type: "trade", start: M(12, 30), end: M(13, 30) },
-    { id: "lunch", t: "13:30–14:00", label: "🍽️ Lunch + Break", desc: "Eat away from the desk. No charts.", type: "rest", start: M(13, 30), end: M(14, 0) },
-    { id: "t3", t: "14:00–15:00", label: "🎯 Trading Block 3", desc: "Fresh eyes after lunch. Same rules, same discipline.", type: "trade", start: M(14, 0), end: M(15, 0) },
-    { id: "b2", t: "15:00–15:15", label: "🚶 Break", desc: "Walk, breathe, eyes off the screen.", type: "rest", start: M(15, 0), end: M(15, 15) },
-    { id: "t4", t: "15:15–16:15", label: "🎯 Trading Block 4", desc: "Stay selective. Quality over quantity.", type: "trade", start: M(15, 15), end: M(16, 15) },
-    { id: "b3", t: "16:15–16:30", label: "☕ Break", desc: "Short reset before the final block.", type: "rest", start: M(16, 15), end: M(16, 30) },
-    { id: "tfinal", t: "16:30–16:50", label: "🎯 Final Trading Block", desc: "Last window. A+ setups only, or just manage what's open.", type: "trade", start: M(16, 30), end: M(16, 50) },
-  ],
-  close: [
-    { id: "eod", t: "16:50–17:00", label: "📊 End-of-Day Review", desc: "P&L, executions, screenshots, lessons, journal.", type: "prep", start: M(16, 50), end: M(17, 0) },
-  ],
-};
+// ---------- schedule (edited in Settings, read from localStorage) ----------
+function useSchedule() {
+  const [doc, setDoc] = useState(() => loadScheduleDoc());
 
-const ALL_BLOCKS = [...SCHEDULE.prep, ...SCHEDULE.session, ...SCHEDULE.close];
+  useEffect(() => {
+    const reload = () => {
+      const next = loadScheduleDoc();
+      setDoc((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+    };
+    const onStorage = (e) => {
+      if (!e || !e.key || e.key === SCHEDULE_KEY) reload();
+    };
+    const onVis = () => { if (!document.hidden) reload(); };
+    window.addEventListener(SCHEDULE_EVENT, reload);
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", reload);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener(SCHEDULE_EVENT, reload);
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", reload);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
+
+  return doc;
+}
+
 const IMPACT_RULE = { high: "Stand aside", med: "Half size", low: "Trade as normal" };
 const IMPACT_LABEL = { high: "Red · High impact", med: "Orange · Medium impact", low: "Yellow · Low impact" };
 // ---------- auto news (focus markets) ----------
@@ -188,10 +195,10 @@ const isBreakEven = (v) => Math.abs(v) < BE_LIMIT;
 const fmtClock = (m) => (m == null ? "--:--" : pad(Math.floor(m / 60)) + ":" + pad(m % 60));
 
 // Which trading block a trade belongs to, based on the minute it was logged
-function blockNameFor(m) {
+function blockNameFor(m, blocks) {
   if (m == null) return "Time not recorded";
-  const b = ALL_BLOCKS.find((x) => x.type === "trade" && m >= x.start && m < x.end);
-  return b ? b.label.replace(/^\S+\s/, "") : "Outside trading blocks"; // strips the 🎯 emoji
+  const b = (blocks || []).find((x) => x.type === "trade" && m >= x.start && m < x.end);
+  return b ? b.title : "Outside trading blocks";
 }
 
 function getDayTrades(entry) {
@@ -243,7 +250,6 @@ function formatCountdown(mins) {
 }
 
 // ---------- daily goal helpers ----------
-const GOAL_CHECK_MIN = M(16, 30); // 4:30 PM check-in
 
 const GOAL_MSGS = {
   hit: [
@@ -292,7 +298,7 @@ function pickGoalMsg(kind) {
   return pool[i];
 }
 
-function buildGoalPopup(kind, target, net, money, fmt) {
+function buildGoalPopup(kind, target, net, money, fmt, at = "Daily") {
   const d = money(Math.max(0, target - net));
   const msg = pickGoalMsg(kind)
     .replace(/{d}/g, d)
@@ -302,12 +308,12 @@ function buildGoalPopup(kind, target, net, money, fmt) {
     return { kind, emoji: "🏆", kicker: "Daily target hit", title: "Congratulations!", figure: fmt(net), sub: "Today's goal: " + money(target), msg };
   }
   if (kind === "half") {
-    return { kind, emoji: "🔥", kicker: "4:30 PM check-in", title: "So close!", figure: d, sub: "left to reach your goal", msg };
+    return { kind, emoji: "🔥", kicker: at + " check-in", title: "So close!", figure: d, sub: "left to reach your goal", msg };
   }
   if (kind === "low") {
-    return { kind, emoji: "🌱", kicker: "4:30 PM check-in", title: "Day's almost done", figure: d, sub: "left to reach your goal", msg };
+    return { kind, emoji: "🌱", kicker: at + " check-in", title: "Day's almost done", figure: d, sub: "left to reach your goal", msg };
   }
-  return { kind, emoji: "💙", kicker: "4:30 PM check-in", title: "Tough day, stay steady", figure: d, sub: "was needed to reach your goal (net " + fmt(net) + ")", msg };
+  return { kind, emoji: "💙", kicker: at + " check-in", title: "Tough day, stay steady", figure: d, sub: "was needed to reach your goal (net " + fmt(net) + ")", msg };
 }
 
 const CONFETTI_COLORS = ["#8dffc0", "#ffd36b", "#7ab6ff", "#ff9ab0", "#ffffff", "#c9a6ff"];
@@ -568,7 +574,7 @@ function DayChart({ trades, maxLoss }) {
 }
 
 // ---------- history: change vs previous day + chart + trade list ----------
-function DayBreakdown({ entry, history, fmt, onOpenImage }) {
+function DayBreakdown({ entry, history, fmt, onOpenImage, blocks }) {
   const trades = useMemo(() => getDayTrades(entry), [entry]);
   const hasShots = trades.some((t) => t.s);
 
@@ -627,7 +633,7 @@ function DayBreakdown({ entry, history, fmt, onOpenImage }) {
                   <span className="ddt-n">{i + 1}</span>
                   <span className="ddt-meta">
                     <span className="ddt-time">{fmtClock(t.m)}</span>
-                    <span className="ddt-block">{blockNameFor(t.m)}</span>
+                    <span className="ddt-block">{blockNameFor(t.m, blocks)}</span>
                   </span>
                   <span className={`ddt-val ${cls}`}>{fmt(t.v)}</span>
                   <span className="ddt-run">{fmt(running)}</span>
@@ -848,7 +854,7 @@ function EditLimitModal({ mode, maxLoss, currency, tradeLimit, dailyTarget, onCl
     : "Set today's trade cap";
   const sub =
     mode === "loss" ? "The most you're willing to be down today, set now while calm."
-    : mode === "goal" ? "Hit it and you'll get a celebration. Miss it and you'll get a 4:30 PM check-in. Enter 0 to turn it off."
+    : mode === "goal" ? "Hit it and you'll get a celebration. Miss it and you'll get an end-of-day check-in. Enter 0 to turn it off."
     : "The most trades you'll take today, set now while calm.";
 
   return (
@@ -915,6 +921,10 @@ const MENU_ICONS = {
   perf: ["M22 7 13.5 15.5 8.5 10.5 2 17", "M16 7h6v6"],
   news: ["M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2", "M18 14h-8", "M15 18h-5", "M10 6h8v4h-8z"],
   notes: ["M12 20h9", "M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"],
+  settings: [
+    "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
+    "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z",
+  ],
   sun: ["M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z", "M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"],
   moon: ["M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"],
   logout: ["M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4", "m16 17 5-5-5-5", "M21 12H9"],
@@ -930,7 +940,7 @@ function MIcon({ name }) {
   );
 }
 
-function HeaderMenu({ theme, onToggleTheme, onSummit, onPerformance, onNews, onNotepad, onLogout }) {
+function HeaderMenu({ theme, onToggleTheme, onSummit, onPerformance, onNews, onNotepad, onSettings = () => {}, onLogout }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const btnRef = useRef(null);
@@ -1016,6 +1026,7 @@ function HeaderMenu({ theme, onToggleTheme, onSummit, onPerformance, onNews, onN
           <Item icon="perf" label="Performance" onClick={run(onPerformance)} />
           <Item icon="news" label="News" onClick={run(onNews)} />
           <Item icon="notes" label="Notepad" onClick={run(onNotepad)} />
+          <Item icon="settings" label="Settings" onClick={run(onSettings)} />
 
           <div className="ts-menu-sep" role="separator" />
 
@@ -1074,7 +1085,7 @@ function activeSessionLabel(date, short) {
   }
 }
 
-function HoloClock() {
+function HoloClock({ dayStart, dayEnd }) {
   const [t, setT] = useState(() => new Date());
   const [away, setAway] = useState(false);
   const awayRef = useRef(false);
@@ -1119,8 +1130,8 @@ function HoloClock() {
 
   // progress through the 10:30 – 17:00 trading day
   const mins = t.getHours() * 60 + t.getMinutes();
-  const start = M(10, 30);
-  const end = M(17, 0);
+  const start = dayStart;
+  const end = Math.max(dayEnd, dayStart + 1);
   const pct = Math.max(0, Math.min(100, ((mins - start) / (end - start)) * 100));
 
   return (
@@ -1242,7 +1253,7 @@ function Ticker({ news, nowMin, netPnl, trades, tradeLimit, maxLoss, fmt, money,
 }
 
 // ---------- component ----------
-export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, onOpenNotepad } = {}) {
+export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, onOpenNotepad, onOpenSettings } = {}) {
   const [authUser, setAuthUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
 
@@ -1264,6 +1275,24 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
   }, []);
 
   const dayKey = "td_day_" + todayKey();
+
+  const scheduleDoc = useSchedule();
+  const sched = useMemo(() => {
+    const blocks = scheduleDoc.blocks;
+    const firstTrade = blocks.find((b) => b.type === "trade");
+    const dayStart = blocks.length ? Math.min(...blocks.map((b) => b.start)) : 10 * 60 + 30;
+    const dayEnd = blocks.length ? Math.max(...blocks.map((b) => b.end)) : 17 * 60;
+    return {
+      blocks,
+      groups: groupSchedule(scheduleDoc),
+      titles: scheduleDoc.titles,
+      dayStart,
+      dayEnd,
+      tradeOpen: firstTrade ? firstTrade.start : dayStart,
+      lastBlockId: blocks.length ? blocks[blocks.length - 1].id : null,
+      goalCheck: Number.isFinite(scheduleDoc.goalCheck) ? scheduleDoc.goalCheck : DEFAULT_GOAL_CHECK,
+    };
+  }, [scheduleDoc]);
 
   const [theme, setTheme] = useLocalStorageState("td_theme", "dark");
   const [follow, setFollow] = useLocalStorageState("td_follow", true);
@@ -1534,15 +1563,11 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
 
   const currentNowId = useMemo(() => {
     if (weekend) return null; // no live block on Sat/Sun
-    for (const b of ALL_BLOCKS) {
-      const isNow =
-        b.end > b.start
-          ? nowMin >= b.start && nowMin < b.end
-          : nowMin >= b.start && nowMin < b.start + 15 && b.start === b.end;
-      if (isNow) return b.id;
+    for (const b of sched.blocks) {
+      if (nowMin >= b.start && nowMin < b.end) return b.id;
     }
     return null;
-  }, [nowMin, weekend]);
+  }, [nowMin, weekend, sched.blocks]);
 
   const liveHighImpact = useMemo(() => {
     return (
@@ -1569,18 +1594,18 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
         sub: `Net ${fmt(netPnl)} against a ${money(maxLoss)} floor you set this morning, while calm.`,
       };
     }
-    if (liveHighImpact && nowMin < M(17, 0)) {
+    if (liveHighImpact && nowMin < sched.dayEnd) {
       return {
         limit: true,
         head: `Red news window — ${liveHighImpact.title} at ${liveHighImpact.time}`,
         sub: "Be flat or half size. Trade the reaction after it settles, not the spike.",
       };
     }
-    if (nowMin < M(11, 0)) {
+    if (nowMin < sched.tradeOpen) {
       return { limit: false, head: "Market not open yet", sub: "Use this window to prep, not to pre-load stress." };
     }
-    if (nowMin < M(17, 0)) {
-      const minsLeft = M(17, 0) - nowMin;
+    if (nowMin < sched.dayEnd) {
+      const minsLeft = sched.dayEnd - nowMin;
       return {
         limit: false,
         head: "In session",
@@ -1590,7 +1615,7 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
       };
     }
     return { limit: false, head: "Session closed for today", sub: `Closed at ${fmt(netPnl)}. Log the day and step away.` };
-  }, [netPnl, maxLoss, liveHighImpact, nowMin, fmt, money, weekend]);
+  }, [netPnl, maxLoss, liveHighImpact, nowMin, fmt, money, weekend, sched.dayEnd, sched.tradeOpen]);
 
   const wins = day.pnl.filter((v) => v >= BE_LIMIT).length;
   const losses = day.pnl.filter((v) => v <= -BE_LIMIT).length;
@@ -1676,12 +1701,12 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
   };
 
   const currentBlock = useMemo(
-    () => ALL_BLOCKS.find((b) => b.id === currentNowId) || null,
-    [currentNowId]
+    () => sched.blocks.find((b) => b.id === currentNowId) || null,
+    [currentNowId, sched.blocks]
   );
   const nextBlock = useMemo(
-    () => (weekend ? null : ALL_BLOCKS.filter((b) => b.start > nowMin).sort((a, b) => a.start - b.start)[0] || null),
-    [nowMin, weekend]
+    () => (weekend ? null : sched.blocks.filter((b) => b.start > nowMin).sort((a, b) => a.start - b.start)[0] || null),
+    [nowMin, weekend, sched.blocks]
   );
 
   // ---------- news alert popup (fires when an event is within 30 min) ----------
@@ -1716,13 +1741,13 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
       return;
     }
 
-    if (!goalCelebrated && !goalEvaluated && nowMin >= GOAL_CHECK_MIN) {
+    if (!goalCelebrated && !goalEvaluated && nowMin >= sched.goalCheck) {
       setGoalEvaluated(true);
       const kind = netPnl < 0 ? "red" : netPnl >= dailyTarget / 2 ? "half" : "low";
-      setGoalPopup(buildGoalPopup(kind, dailyTarget, netPnl, money, fmt));
+      setGoalPopup(buildGoalPopup(kind, dailyTarget, netPnl, money, fmt, fmtClock(sched.goalCheck)));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [netPnl, nowMin, dailyTarget, goalCelebrated, goalEvaluated, goalPopup, hydrated, syncState]);
+  }, [netPnl, nowMin, dailyTarget, goalCelebrated, goalEvaluated, goalPopup, hydrated, syncState, sched.goalCheck]);
 
   // ---------- scroll-to-now ----------
   const scrollToNow = useCallback(
@@ -1773,8 +1798,8 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
   }, [currentNowId]);
 
   const nowBlockLabel = useMemo(
-    () => ALL_BLOCKS.find((b) => b.id === currentNowId)?.label || "",
-    [currentNowId]
+    () => sched.blocks.find((b) => b.id === currentNowId)?.label || "",
+    [currentNowId, sched.blocks]
   );
 
   // ---------- handlers ----------
@@ -1817,6 +1842,13 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
       onOpenNotepad();
     } else if (typeof window !== "undefined") {
       window.location.hash = "notepad";
+    }
+  };
+  const handleGoToSettings = () => {
+    if (typeof onOpenSettings === "function") {
+      onOpenSettings();
+    } else if (typeof window !== "undefined") {
+      window.location.hash = "settings";
     }
   };
 
@@ -1933,7 +1965,7 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
     energy: day.energy,
     news: todaysNews.map((n) => ({ time: n.time, title: n.title, impact: n.impact })),
     note: logForm.note.trim(),
-    stoppedOnTime: !!day.checks["eod"],
+    stoppedOnTime: !!(sched.lastBlockId && day.checks[sched.lastBlockId]),
     trades: day.pnl.map((v, i) => ({
       v,
       m: day.times && day.times[i] != null ? day.times[i] : null,
@@ -2107,6 +2139,7 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
               onPerformance={handleGoToPerformance}
               onNews={handleGoToNews}
               onNotepad={handleGoToNotepad}
+              onSettings={handleGoToSettings}
               onLogout={handleLogout}
             />
           </div>
@@ -2269,7 +2302,7 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
               <div className="pnl-meterlbl">
                 {goalHit
                   ? "Goal reached. Protect the day and stop on time."
-                  : `${money(dailyTarget - netPnl)} to go today. Check-in at 4:30 PM.`}
+                  : `${money(dailyTarget - netPnl)} to go today. Check-in at ${fmtClock(sched.goalCheck)}.`}
               </div>
             </>
           ) : (
@@ -2423,7 +2456,7 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
               done={!!day.checks[currentBlock.id]}
               onToggle={() => toggleCheck(currentBlock.id)}
               isTrade={currentBlock.type === "trade"}
-              isEnergy={currentBlock.id === "eod"}
+              isEnergy={currentBlock.id === sched.lastBlockId}
               energy={day.energy}
               onEnergy={(i) => setDay((d) => ({ ...d, energy: i }))}
               pnlInputRef={pnlInputRef}
@@ -2446,14 +2479,15 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
           )
         ) : (
           <>
-            <h2 className="section">Preparation<span className="sub">10:30 – 11:00</span></h2>
-            <div>{SCHEDULE.prep.map(renderBlock)}</div>
-
-            <h2 className="section">The window<span className="sub">11:00 – 16:50 EAT</span></h2>
-            <div>{SCHEDULE.session.map(renderBlock)}</div>
-
-            <h2 className="section">Wrap-up<span className="sub">16:50 – 17:00</span></h2>
-            <div>{SCHEDULE.close.map(renderBlock)}</div>
+            {(["prep", "session", "close"]).map((g) =>
+              sched.groups[g].length ? (
+                <React.Fragment key={g}>
+                  <h2 className="section">{sched.titles[g]}</h2>
+                  {groupRange(sched.groups[g]) && <div className="sub">{groupRange(sched.groups[g])}</div>}
+                  <div>{sched.groups[g].map(renderBlock)}</div>
+                </React.Fragment>
+              ) : null
+            )}
 
             <div className="energybar">
               <div className="lbl">Energy check-in — be honest about how the day felt</div>
@@ -2624,7 +2658,7 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
                 <div className="ddstat"><div className="v">{activeHistEntry.missed ?? 0}</div><div className="l">missed</div></div>
               </div>
 
-              <DayBreakdown entry={activeHistEntry} history={fullHistory} fmt={fmt} onOpenImage={setLightbox} />
+              <DayBreakdown entry={activeHistEntry} history={fullHistory} fmt={fmt} onOpenImage={setLightbox} blocks={sched.blocks} />
 
               {activeHistEntry.note && (
                 <>
@@ -2673,7 +2707,7 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
         <span>Back to now</span>
       </button>
 
-      <HoloClock />
+      <HoloClock dayStart={sched.dayStart} dayEnd={sched.dayEnd} />
 
       <nav className="ts-dock" aria-label="Sections">
         {DOCK.map((t) => (
