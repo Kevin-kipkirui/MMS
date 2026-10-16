@@ -1,22 +1,21 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 
 /**
- * <Settings />  ->  Pages/Settings.jsx
+ * <Settings />  ->  pages/Settings.jsx
  *
  * Lets the trader own their day. Every block of the routine (times, titles,
  * icons, descriptions, type) is editable, new blocks can be inserted anywhere,
  * and one tap loads a ready-made layout (early morning, evening, ...).
  *
  * The schedule is stored in localStorage under SCHEDULE_KEY. The named exports
- * below (loadScheduleDoc, groupSchedule, ...) are what <Session /> will read
- * so nothing in the day is hard-coded any more.
+ * below (loadScheduleDoc, groupSchedule, ...) are what <Session /> reads.
  *
- * Visual layer matches The Session: obsidian navy / champagne gold (dark) and
- * frosted sky-blue glass (light). Theme is shared through "td_theme".
+ * Visual layer: Tailwind utility classes + the token sheet at the bottom.
+ * Theme is shared with the rest of the app through "td_theme".
  */
 
 // =====================================================================
-// shared helpers (these exports are what Session.jsx will import)
+// shared helpers (these exports are what Session.jsx imports)
 // =====================================================================
 const pad = (n) => String(n).padStart(2, "0");
 const M = (h, m) => h * 60 + m;
@@ -218,185 +217,439 @@ function validate(blocks) {
   let warns = 0;
   const add = (id, level, msg) => {
     (byId[id] = byId[id] || []).push({ level, msg });
-    if (level === "error") errors += 1;
-    else warns += 1;
+    if (level === "error") errors++;
+    else warns++;
   };
-
-  blocks.forEach((b, i) => {
-    if (!b || typeof b !== "object") return;
-    if (b.start >= b.end) add(b.id, "error", "Block ends before it starts.");
-    if (b.title && b.title.trim().length === 0) add(b.id, "warn", "Title is empty.");
-    if (i > 0 && b.start < blocks[i - 1].start) add(b.id, "warn", "This block starts before the previous one.");
+  blocks.forEach((b) => {
+    if (!b.title.trim()) add(b.id, "error", "Give this block a title.");
+    if (b.end <= b.start) add(b.id, "error", "End time must be after the start time.");
   });
-
-  for (let i = 0; i < blocks.length; i += 1) {
-    const a = blocks[i];
-    for (let j = i + 1; j < blocks.length; j += 1) {
-      const b = blocks[j];
-      if (a.end <= b.start || b.end <= a.start) continue;
-      add(a.id, "warn", "This block overlaps another block.");
-      add(b.id, "warn", "This block overlaps another block.");
-      break;
+  const ok = blocks
+    .filter((b) => b.end > b.start)
+    .slice()
+    .sort((a, b) => a.start - b.start);
+  for (let i = 0; i < ok.length - 1; i++) {
+    const a = ok[i];
+    const n = ok[i + 1];
+    if (a.end > n.start) {
+      const by = a.end - n.start;
+      add(a.id, "warn", `Overlaps "${n.title || "Untitled"}" by ${by} min.`);
+      add(n.id, "warn", `Overlaps "${a.title || "Untitled"}" by ${by} min.`);
     }
   }
-
-  return { errors, warns, byId, noTrade: !blocks.some((b) => b.type === "trade") };
+  return { byId, errors, warns, noTrade: blocks.length > 0 && !blocks.some((b) => b.type === "trade") };
 }
 
-function Icon({ name, size = 16 }) {
-  const common = { width: size, height: size, display: "inline-block" };
-  const paths = {
-    back: "M15 18L9 12l6-6",
-    moon: "M20 12.5A7.5 7.5 0 0 1 11.5 4a7.5 7.5 0 1 0 8.5 16.5 7.5 7.5 0 0 1 20 12.5Z",
-    sun: "M12 2v2.5M12 19.5V22M4.93 4.93l1.77 1.77M17.3 17.3l1.77 1.77M2 12h2.5M19.5 12H22M4.93 19.07l1.77-1.77M17.3 6.7l1.77-1.77M12 6.5a5.5 5.5 0 1 1 0 11a5.5 5.5 0 0 1 0-11Z",
-    alert: "M12 4.5l8 14H4l8-14Zm0 5.5v3.5M12 17.5h.01",
-    check: "M5 12.5 9.2 16.7 19 6.9",
-    reset: "M4 12a8 8 0 0 1 13.66-5.66M20 12a8 8 0 0 1-13.66 5.66",
-  };
+function useLocalStorageState(key, initialValue) {
+  const [state, setState] = useState(() => readLS(key, initialValue));
+  useEffect(() => {
+    writeLS(key, state);
+  }, [key, state]);
+  return [state, setState];
+}
 
+// =====================================================================
+// icons
+// =====================================================================
+const ICONS = {
+  back: ["m15 18-6-6 6-6"],
+  copy: ["M11 9h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z", "M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"],
+  trash: ["M3 6h18", "M8 6V4h8v2", "M19 6l-1 14H6L5 6", "M10 11v6", "M14 11v6"],
+  plus: ["M12 5v14", "M5 12h14"],
+  reset: ["M3 12a9 9 0 1 0 3-6.7L3 8", "M3 3v5h5"],
+  sun: ["M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z", "M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"],
+  moon: ["M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"],
+  check: ["M20 6 9 17l-5-5"],
+  alert: ["M12 9v4", "M12 17h.01", "M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"],
+};
+
+function Icon({ name, size = 18 }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={common} aria-hidden="true">
-      <path d={paths[name] || paths.alert} />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+      {ICONS[name].map((d, i) => (
+        <path key={i} d={d} stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+      ))}
     </svg>
   );
 }
 
-function Timeline({ blocks }) {
-  if (!blocks || !blocks.length) {
-    return <div className="st-tl-empty">No blocks yet</div>;
-  }
-  const lo = Math.min(...blocks.map((b) => b.start));
-  const hi = Math.max(...blocks.map((b) => b.end));
-  const span = Math.max(1, hi - lo);
+// =====================================================================
+// shared style kit (Tailwind classes that read the CSS variables below)
+// =====================================================================
+const cx = (...a) => a.filter(Boolean).join(" ");
 
+const UI = {
+  panel: "rounded-2xl border border-[color:var(--line)] bg-[var(--panel)] backdrop-blur-xl",
+  field:
+    "h-10 rounded-lg border border-[color:var(--line)] bg-[var(--field)] px-3 text-sm text-[color:var(--fg)] outline-none transition placeholder:text-[color:var(--dim)] hover:border-[color:var(--line-2)] focus:border-[color:var(--accent)] focus:ring-4 focus:ring-[color:var(--ring)]",
+  label: "text-[10.5px] font-medium uppercase tracking-[.14em] text-[color:var(--dim)]",
+  dim: "text-[color:var(--dim)]",
+  btn: "inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 text-sm font-medium transition active:scale-[.97] disabled:pointer-events-none disabled:opacity-40",
+  primary: "bg-[var(--accent)] text-[color:var(--accent-ink)] hover:brightness-110",
+  ghost: "border border-[color:var(--line)] bg-[var(--panel)] text-[color:var(--fg)] hover:border-[color:var(--line-2)]",
+  danger: "bg-[var(--bad)] text-white hover:brightness-110",
+  icon: "grid h-10 w-10 shrink-0 place-items-center rounded-lg text-[color:var(--dim)] transition hover:bg-[var(--panel-2)] hover:text-[color:var(--fg)]",
+  step: "st-mono h-8 min-w-[2.4rem] rounded-md px-1.5 text-xs font-medium text-[color:var(--dim)] transition hover:bg-[var(--panel-2)] hover:text-[color:var(--fg)]",
+};
+
+const SECTIONS = [
+  { id: "st-overview", label: "Overview", group: "Your day" },
+  { id: "st-layouts", label: "Layouts", group: "Your day" },
+  { id: "st-routine", label: "Routine", group: "Your day" },
+  { id: "st-headings", label: "Headings & check-in", group: "Setup" },
+  { id: "st-appearance", label: "Appearance", group: "Setup" },
+];
+
+function SideNav({ active, onGo }) {
+  const groups = [...new Set(SECTIONS.map((s) => s.group))];
   return (
-    <div className="st-tl" aria-label="Daily schedule timeline">
-      <div className="st-tl-bar">
-        {blocks.map((b) => (
+    <div className="sticky top-0 z-30 -mx-5 border-b border-[color:var(--line)] bg-[var(--bg-glass)] px-5 py-2 backdrop-blur-xl lg:top-10 lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
+      <nav aria-label="Settings sections" className="flex gap-3 overflow-x-auto [scrollbar-width:none] lg:flex-col lg:gap-6 lg:overflow-visible">
+        {groups.map((g) => (
+          <div key={g} className="flex gap-1 lg:flex-col">
+            <div className={cx(UI.label, "hidden px-3 pb-2 lg:block")}>{g}</div>
+            {SECTIONS.filter((s) => s.group === g).map((s) => (
+              <button
+                type="button"
+                key={s.id}
+                aria-current={active === s.id ? "true" : undefined}
+                onClick={() => onGo(s.id)}
+                className={cx(
+                  "h-9 shrink-0 whitespace-nowrap rounded-lg px-3 text-left text-sm transition",
+                  active === s.id
+                    ? "bg-[var(--panel-2)] font-medium text-[color:var(--fg)] lg:shadow-[inset_2px_0_0_var(--accent)]"
+                    : "text-[color:var(--dim)] hover:text-[color:var(--fg)]"
+                )}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
+function Section({ id, kicker, title, sub, children }) {
+  return (
+    <section id={id} className="scroll-mt-20 pt-14 first:pt-0 lg:scroll-mt-10">
+      <div className="mb-5">
+        <div className="st-mono text-[11px] uppercase tracking-[.18em] text-[color:var(--accent)]">{kicker}</div>
+        <h2 className="mt-1.5 text-xl font-semibold tracking-tight">{title}</h2>
+        {sub && <p className={cx("mt-1 text-sm", UI.dim)}>{sub}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Banner({ tone, children }) {
+  const isErr = tone === "error";
+  return (
+    <div
+      role={isErr ? "alert" : undefined}
+      className={cx(
+        "mt-3 flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm leading-relaxed",
+        isErr ? "border-[color:var(--bad-line)] bg-[var(--bad-bg)]" : "border-[color:var(--warn-line)] bg-[var(--warn-bg)]"
+      )}
+    >
+      <span className={cx("mt-0.5 shrink-0", isErr ? "text-[color:var(--bad)]" : "text-[color:var(--warn)]")}>
+        <Icon name="alert" size={16} />
+      </span>
+      <span>{children}</span>
+    </div>
+  );
+}
+
+// =====================================================================
+// components
+// =====================================================================
+function Timeline({ blocks }) {
+  const valid = blocks.filter((b) => b.end > b.start);
+  if (!valid.length) return <div className={cx("text-sm", UI.dim)}>Add a block to see your day take shape.</div>;
+  const lo = Math.floor(Math.min(...valid.map((b) => b.start)) / 60) * 60;
+  const hi = Math.max(lo + 60, Math.ceil(Math.max(...valid.map((b) => b.end)) / 60) * 60);
+  const span = hi - lo;
+  const step = Math.max(1, Math.ceil(span / 60 / 6));
+  const ticks = [];
+  for (let m = lo; m <= hi; m += step * 60) ticks.push(m);
+  const pct = (m) => ((m - lo) / span) * 100;
+  return (
+    <div role="img" aria-label="Visual timeline of your trading day">
+      <div className="relative h-14 overflow-hidden rounded-xl border border-[color:var(--line)] bg-[var(--field)]">
+        {valid.map((b) => (
           <span
             key={b.id}
-            className="st-tl-seg"
+            title={`${b.title || "Untitled"} · ${fmtT(b.start)}–${fmtT(b.end)}`}
+            className="absolute inset-y-2 rounded-md transition-all duration-500"
             style={{
-              left: `${((b.start - lo) / span) * 100}%`,
-              width: `${((b.end - b.start) / span) * 100}%`,
-              background: b.type === "prep" ? "var(--c-prep)" : b.type === "rest" ? "var(--c-rest)" : "var(--c-trade)",
+              left: `calc(${pct(b.start)}% + 1px)`,
+              width: `calc(${((b.end - b.start) / span) * 100}% - 2px)`,
+              background: `var(--c-${b.type})`,
+              opacity: b.type === "rest" ? 0.4 : 0.92,
             }}
           />
         ))}
       </div>
-      <div className="st-tl-ticks">
-        {blocks.map((b) => (
-          <span key={b.id + "-tick"} style={{ left: `${((b.start - lo) / span) * 100}%` }}>{fmtT(b.start)}</span>
+      <div className="relative mx-3 mt-2 h-4" aria-hidden="true">
+        {ticks.map((m) => (
+          <span key={m} className={cx("st-mono absolute -translate-x-1/2 text-[10px]", UI.dim)} style={{ left: pct(m) + "%" }}>
+            {pad(Math.floor(m / 60) % 24)}:00
+          </span>
         ))}
       </div>
     </div>
   );
 }
 
-function InsertSlot({ open, onOpen, onClose, onPick, bottom = false }) {
-  if (!open) {
+function ConfirmModal({ modal, onClose }) {
+  if (!modal) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex animate-[st-fade_.2s_ease] items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-5"
+      onClick={onClose}
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="st-modal-title"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm animate-[st-up_.25s_ease] rounded-t-3xl border border-[color:var(--line-2)] bg-[var(--pop)] p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] text-[color:var(--fg)] shadow-2xl sm:rounded-3xl sm:pb-6"
+      >
+        <div id="st-modal-title" className="text-lg font-semibold tracking-tight">{modal.title}</div>
+        <p className={cx("mb-6 mt-1.5 text-sm leading-relaxed", UI.dim)}>{modal.body}</p>
+        <div className="flex gap-2">
+          <button type="button" className={cx(UI.btn, UI.ghost, "flex-1")} onClick={onClose}>
+            {modal.cancelLabel || "Cancel"}
+          </button>
+          <button
+            type="button"
+            autoFocus
+            className={cx(UI.btn, modal.danger ? UI.danger : UI.primary, "flex-1")}
+            onClick={() => {
+              modal.onConfirm();
+              onClose();
+            }}
+          >
+            {modal.confirmLabel || "Confirm"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InsertSlot({ open, bottom, onOpen, onClose, onPick }) {
+  if (open) {
     return (
-      <div className="st-slot">
-        <button type="button" className="st-slot-btn" onClick={onOpen} aria-label="Insert block">+</button>
+      <div role="group" aria-label="Choose the kind of block to add" className="flex animate-[st-in_.2s_ease] flex-wrap justify-center gap-2 py-2">
+        {["trade", "rest", "prep"].map((t) => (
+          <button
+            type="button"
+            key={t}
+            onClick={() => onPick(t)}
+            className="inline-flex h-9 items-center gap-2 rounded-full border border-[color:var(--line)] bg-[var(--panel)] px-4 text-xs font-medium transition hover:border-[color:var(--accent)]"
+          >
+            <span aria-hidden="true">{TYPE_META[t].emoji}</span>
+            {t === "prep" ? "Prep / review" : TYPE_META[t].label}
+          </button>
+        ))}
+        <button type="button" onClick={onClose} className={cx("h-9 rounded-full px-4 text-xs font-medium transition hover:text-[color:var(--fg)]", UI.dim)}>
+          Cancel
+        </button>
       </div>
     );
   }
-
+  if (bottom) {
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        className={cx(
+          "mt-2 flex h-14 w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[color:var(--line-2)] text-sm font-medium transition hover:border-[color:var(--accent)] hover:text-[color:var(--fg)]",
+          UI.dim
+        )}
+      >
+        <Icon name="plus" size={16} /> Add a block
+      </button>
+    );
+  }
   return (
-    <div className="st-slot open">
-      <div className="st-slot-menu" role="menu" aria-label="Choose block type">
-        {Object.keys(TYPE_META).map((key) => (
-          <button key={key} type="button" className="st-chip" onClick={() => { onPick(key); onClose(); }}>
-            {TYPE_META[key].emoji} {TYPE_META[key].label}
-          </button>
-        ))}
-        <button type="button" className="st-chip ghost" onClick={onClose}>Close</button>
-      </div>
+    <div className="group relative flex h-7 items-center justify-center">
+      <span className="absolute inset-x-8 h-px bg-[var(--line)] opacity-0 transition group-hover:opacity-100" />
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label="Insert a block here"
+        title="Insert a block here"
+        className={cx(
+          "relative grid h-5 w-5 place-items-center rounded-full border border-[color:var(--line-2)] bg-[var(--pop)] opacity-40 transition hover:scale-110 hover:border-[color:var(--accent)] group-hover:opacity-100",
+          UI.dim
+        )}
+      >
+        <Icon name="plus" size={11} />
+      </button>
     </div>
   );
 }
 
 function BlockCard({ b, issues, showNotes, showPicker, onUpdate, onNudge, onToggleNotes, onTogglePicker, onDuplicate, onDelete }) {
+  const hasErr = issues.some((i) => i.level === "error");
+  const dur = b.end - b.start;
   return (
-    <div className={`st-block ${b.type} ${issues.some((i) => i.level === "error") ? "err" : ""}`}>
-      <div className="st-block-top">
+    <div
+      className={cx(
+        UI.panel,
+        "relative animate-[st-in_.4s_cubic-bezier(.22,1,.36,1)_both] p-4 pl-5 transition hover:border-[color:var(--line-2)]",
+        hasErr && "!border-[color:var(--bad)]"
+      )}
+    >
+      <span className="absolute inset-y-4 left-0 w-[3px] rounded-r-full" style={{ background: `var(--c-${b.type})` }} />
+
+      <div className="flex items-center gap-2">
         <button
           type="button"
-          className="st-emoji"
-          aria-label="Select block emoji"
-          aria-expanded={showPicker}
           onClick={onTogglePicker}
+          aria-expanded={showPicker}
+          aria-label="Choose an icon for this block"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-[color:var(--line)] bg-[var(--field)] text-xl leading-none transition hover:border-[color:var(--line-2)]"
         >
           {b.emoji || TYPE_META[b.type].emoji}
         </button>
         <input
-          type="text"
-          className="st-title"
+          className={cx(UI.field, "min-w-0 flex-1 font-medium")}
           value={b.title}
+          maxLength={40}
           placeholder="Block title"
+          aria-label="Block title"
           onChange={(e) => onUpdate({ title: e.target.value })}
         />
-        <button type="button" className="st-iconbtn" onClick={onDuplicate} aria-label="Duplicate block">⧉</button>
-        <button type="button" className="st-iconbtn danger" onClick={onDelete} aria-label="Delete block">✕</button>
+        <button type="button" className={UI.icon} onClick={onDuplicate} aria-label="Duplicate block" title="Duplicate">
+          <Icon name="copy" size={16} />
+        </button>
+        <button
+          type="button"
+          className={cx(UI.icon, "hover:!bg-[var(--bad-bg)] hover:!text-[color:var(--bad)]")}
+          onClick={onDelete}
+          aria-label="Delete block"
+          title="Delete"
+        >
+          <Icon name="trash" size={16} />
+        </button>
       </div>
 
       {showPicker && (
-        <div className="st-emoji-grid" role="grid" aria-label="Emoji picker">
-          {EMOJIS.map((emoji) => (
+        <div role="listbox" aria-label="Icons" className="mt-3 grid animate-[st-in_.18s_ease] grid-cols-5 gap-1 rounded-xl border border-[color:var(--line)] bg-[var(--field)] p-2 sm:grid-cols-10">
+          {EMOJIS.map((em) => (
             <button
-              key={emoji}
               type="button"
-              className={b.emoji === emoji ? "on" : ""}
-              onClick={() => { onUpdate({ emoji }); onTogglePicker(); }}
-              aria-label={`Use emoji ${emoji}`}
+              key={em}
+              role="option"
+              aria-selected={b.emoji === em}
+              onClick={() => {
+                onUpdate({ emoji: em });
+                onTogglePicker();
+              }}
+              className={cx(
+                "grid aspect-square place-items-center rounded-lg border text-lg transition hover:bg-[var(--panel-2)]",
+                b.emoji === em ? "border-[color:var(--accent)] bg-[var(--panel-2)]" : "border-transparent"
+              )}
             >
-              {emoji}
+              {em}
             </button>
           ))}
         </div>
       )}
 
-      <div className="st-times">
-        <label className="st-field">
-          <span>Start</span>
-          <input type="time" value={toTimeValue(b.start)} onChange={(e) => onUpdate({ start: fromTimeValue(e.target.value) ?? b.start })} />
-        </label>
-        <div className="st-arrow">→</div>
-        <label className="st-field">
-          <span>End</span>
-          <input type="time" value={toTimeValue(b.end)} onChange={(e) => onUpdate({ end: fromTimeValue(e.target.value) ?? b.end })} />
-        </label>
-      </div>
+      <div className="mt-4 flex flex-wrap items-end gap-x-5 gap-y-4">
+        <div className="flex items-end gap-2">
+          <label className="block">
+            <span className={UI.label}>Starts</span>
+            <input
+              type="time"
+              step={300}
+              value={toTimeValue(b.start)}
+              className={cx(UI.field, "st-mono mt-1.5 block w-[7.6rem]")}
+              onChange={(e) => {
+                const m = fromTimeValue(e.target.value);
+                if (m !== null) onUpdate({ start: m });
+              }}
+            />
+          </label>
+          <span className={cx("pb-2.5", UI.dim)} aria-hidden="true">→</span>
+          <label className="block">
+            <span className={UI.label}>Ends</span>
+            <input
+              type="time"
+              step={300}
+              value={toTimeValue(b.end)}
+              className={cx(UI.field, "st-mono mt-1.5 block w-[7.6rem]")}
+              onChange={(e) => {
+                const m = fromTimeValue(e.target.value);
+                if (m !== null) onUpdate({ end: m });
+              }}
+            />
+          </label>
+        </div>
 
-      <div className="st-len">
-        <span className="st-len-lbl">Length</span>
-        <div className="st-stepper" aria-label={`Duration for ${b.title}`}>
-          <button type="button" onClick={() => onNudge(-15)} aria-label="Shorten by 15 minutes">−15</button>
-          <output className={b.end - b.start <= 0 ? "bad" : ""}>{fmtDur(b.end - b.start)}</output>
-          <button type="button" onClick={() => onNudge(15)} aria-label="Lengthen by 15 minutes">+15</button>
+        <div>
+          <span className={UI.label}>Length</span>
+          <div className="mt-1.5 flex h-10 items-center rounded-lg border border-[color:var(--line)] bg-[var(--field)] p-0.5">
+            {[-15, -5].map((d) => (
+              <button type="button" key={d} className={UI.step} onClick={() => onNudge(d)} aria-label={`Shorten by ${-d} minutes`}>
+                −{-d}
+              </button>
+            ))}
+            <output className={cx("st-mono min-w-[3.6rem] text-center text-sm font-medium", dur <= 0 && "text-[color:var(--bad)]")}>
+              {dur > 0 ? fmtDur(dur) : "—"}
+            </output>
+            {[5, 15].map((d) => (
+              <button type="button" key={d} className={UI.step} onClick={() => onNudge(d)} aria-label={`Extend by ${d} minutes`}>
+                +{d}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="min-w-[15rem] flex-1">
+          <span className={UI.label}>Type</span>
+          <div role="radiogroup" aria-label="Block type" className="mt-1.5 grid h-10 grid-cols-3 gap-0.5 rounded-lg border border-[color:var(--line)] bg-[var(--field)] p-0.5">
+            {Object.keys(TYPE_META).map((t) => (
+              <button
+                type="button"
+                key={t}
+                role="radio"
+                aria-checked={b.type === t}
+                onClick={() => onUpdate({ type: t })}
+                className={cx(
+                  "flex items-center justify-center gap-1.5 rounded-md text-xs font-medium transition",
+                  b.type === t
+                    ? "bg-[var(--panel-2)] text-[color:var(--fg)] shadow-[inset_0_0_0_1px_var(--line-2)]"
+                    : "text-[color:var(--dim)] hover:text-[color:var(--fg)]"
+                )}
+              >
+                <i className="block h-1.5 w-1.5 rounded-full" style={{ background: `var(--c-${t})` }} aria-hidden="true" />
+                {TYPE_META[t].label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className="st-seg" role="segmentedcontrol" aria-label="Block type">
-        {Object.keys(TYPE_META).map((key) => (
-          <button
-            key={key}
-            type="button"
-            className={b.type === key ? "on" : ""}
-            onClick={() => onUpdate({ type: key })}
-          >
-            <i style={{ background: TYPE_META[key].color }} /> {TYPE_META[key].label}
-          </button>
-        ))}
-      </div>
-
-      <button type="button" className="st-notes-toggle" onClick={onToggleNotes}>
-        {showNotes ? "Hide note" : "Add a note…"}
+      <button
+        type="button"
+        onClick={onToggleNotes}
+        aria-expanded={showNotes}
+        className={cx("mt-4 block w-full truncate text-left text-xs underline decoration-[color:var(--line-2)] underline-offset-4 transition hover:text-[color:var(--fg)]", UI.dim)}
+      >
+        {showNotes ? "Hide description" : b.desc ? b.desc : "Add a description"}
       </button>
-
       {showNotes && (
         <textarea
-          className="st-desc"
+          className={cx(UI.field, "mt-2 block min-h-[72px] w-full resize-y py-2.5 leading-relaxed")}
+          rows={3}
+          maxLength={220}
           value={b.desc}
           placeholder="A short reminder shown while this block is live."
           aria-label="Block description"
@@ -405,35 +658,13 @@ function BlockCard({ b, issues, showNotes, showPicker, onUpdate, onNudge, onTogg
       )}
 
       {issues.map((i, k) => (
-        <div key={k} className={`st-issue ${i.level}`}>
+        <div
+          key={k}
+          className={cx("mt-3 flex items-center gap-1.5 text-xs font-medium", i.level === "error" ? "text-[color:var(--bad)]" : "text-[color:var(--warn)]")}
+        >
           <Icon name="alert" size={14} /> {i.msg}
         </div>
       ))}
-    </div>
-  );
-}
-
-function ConfirmModal({ modal, onClose }) {
-  if (!modal) return null;
-  return (
-    <div className="st-backdrop" onClick={onClose}>
-      <div className="st-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <div className="st-modal-title">{modal.title}</div>
-        <div className="st-modal-sub">{modal.body}</div>
-        <div className="st-modal-actions">
-          <button type="button" className="st-btn ghost" onClick={onClose}>{modal.cancelLabel || "Cancel"}</button>
-          <button
-            type="button"
-            className={`st-btn ${modal.danger ? "danger" : "primary"}`}
-            onClick={() => {
-              modal.onConfirm?.();
-              onClose();
-            }}
-          >
-            {modal.confirmLabel || "OK"}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -448,12 +679,13 @@ export default function Settings({ onBack } = {}) {
   const [ripple, setRipple] = useLocalStorageState("td_settings_ripple", true);
   const [notesOpen, setNotesOpen] = useState({});
   const [pickerFor, setPickerFor] = useState(null);
-  const [insertAt, setInsertAt] = useState(null);
+  const [insertAt, setInsertAt] = useState(null); // -1 = before first block
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
   const fontLinkAdded = useRef(false);
 
+  // share the theme with the rest of the app
   useEffect(() => {
     const sync = () => {
       const t = readLS("td_theme", "dark");
@@ -472,19 +704,45 @@ export default function Settings({ onBack } = {}) {
     writeLS("td_theme", t);
   };
 
+  // fonts: Inter for text, JetBrains Mono for times
   useEffect(() => {
     if (fontLinkAdded.current || typeof document === "undefined") return;
     fontLinkAdded.current = true;
-    if (!document.getElementById("ts-font-link")) {
+    if (!document.getElementById("st-font-link")) {
       const link = document.createElement("link");
-      link.id = "ts-font-link";
+      link.id = "st-font-link";
       link.rel = "stylesheet";
-      link.href = "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap";
+      link.href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap";
       document.head.appendChild(link);
     }
   }, []);
 
   useEffect(() => () => clearTimeout(toastTimer.current), []);
+
+  // which section is in view (drives the navigator highlight)
+  const [active, setActive] = useState(SECTIONS[0].id);
+
+  useEffect(() => {
+    const onScroll = () => {
+      let cur = SECTIONS[0].id;
+      for (const s of SECTIONS) {
+        const el = document.getElementById(s.id);
+        if (el && el.getBoundingClientRect().top <= 140) cur = s.id;
+      }
+      setActive(cur);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const goTo = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    setActive(id);
+  };
 
   const showToast = useCallback((msg, undo) => {
     clearTimeout(toastTimer.current);
@@ -492,6 +750,7 @@ export default function Settings({ onBack } = {}) {
     toastTimer.current = setTimeout(() => setToast(null), 4500);
   }, []);
 
+  // ---------- derived ----------
   const previewDoc = useMemo(() => finalizeDoc(draft), [draft]);
   const dirty = useMemo(() => JSON.stringify(previewDoc) !== JSON.stringify(saved), [previewDoc, saved]);
   const check = useMemo(() => validate(draft.blocks), [draft.blocks]);
@@ -517,6 +776,7 @@ export default function Settings({ onBack } = {}) {
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
+  // ---------- draft mutations ----------
   const updateBlock = (id, patch) => {
     setDraft((d) => {
       const idx = d.blocks.findIndex((b) => b.id === id);
@@ -524,7 +784,7 @@ export default function Settings({ onBack } = {}) {
       const old = d.blocks[idx];
       const next = { ...old, ...patch };
       if (patch.type && patch.type !== old.type && (old.emoji === TYPE_META[old.type].emoji || !old.emoji)) {
-        next.emoji = TYPE_META[patch.type].emoji;
+        next.emoji = TYPE_META[patch.type].emoji; // keep the default icon in step with the type
       }
       let blocks = d.blocks.map((b) => (b.id === id ? next : b));
       if (ripple && patch.end !== undefined && patch.end !== old.end) {
@@ -691,221 +951,292 @@ export default function Settings({ onBack } = {}) {
     <div className="st-root" data-theme={theme}>
       <style>{CSS}</style>
 
-      <div className="st-wrap">
-        <header className="st-head">
-          <button type="button" className="st-back" onClick={leave} aria-label="Back to The Session">
-            <Icon name="back" size={20} />
+      <div className="relative z-10 mx-auto max-w-5xl px-5 pb-44 pt-6 lg:pt-10">
+        <header className="mb-6 flex items-center gap-4">
+          <button
+            type="button"
+            onClick={leave}
+            aria-label="Back to The Session"
+            className="grid h-10 w-10 place-items-center rounded-full border border-[color:var(--line)] bg-[var(--panel)] transition hover:border-[color:var(--line-2)] hover:bg-[var(--panel-2)]"
+          >
+            <Icon name="back" size={18} />
           </button>
           <div>
-            <h1>Settings</h1>
-            <p>Build the trading day around you</p>
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Settings</h1>
+            <p className={cx("text-sm", UI.dim)}>Build the trading day around you</p>
           </div>
         </header>
 
-        <section className="st-hero" aria-label="Your day at a glance">
-          <div className="st-hero-kicker">Your trading day</div>
-          {stats ? (
-            <>
-              <div className="st-hero-big">
-                {fmtT(stats.lo)} <span>to</span> {fmtT(stats.hi)}
-              </div>
-              <div className="st-hero-sub">
-                {fmtDur(stats.span)} window across {stats.count} {stats.count === 1 ? "block" : "blocks"}
-              </div>
-              <div className="st-chips">
-                <span className="st-hchip">🎯 {fmtDur(stats.trade)} trading</span>
-                <span className="st-hchip">☕ {fmtDur(stats.rest)} breaks</span>
-              </div>
-            </>
-          ) : (
-            <div className="st-hero-big small">No blocks yet</div>
-          )}
-          <Timeline blocks={draft.blocks} />
-          <div className="st-legend" aria-hidden="true">
-            {Object.keys(TYPE_META).map((t) => (
-              <span key={t}>
-                <i style={{ background: TYPE_META[t].color }} />
-                {t === "prep" ? "Prep / review" : TYPE_META[t].label}
-              </span>
-            ))}
-          </div>
-        </section>
+        <div className="lg:grid lg:grid-cols-[190px_minmax(0,1fr)] lg:gap-14">
+          <aside className="contents lg:block">
+            <SideNav active={active} onGo={goTo} />
+          </aside>
 
-        <h2 className="st-h2">Start from a layout<span>One tap, then fine-tune below</span></h2>
-        <div className="st-presets" role="list">
-          {PRESETS.map((p) => {
-            const b = buildBlocks(p.shift, p.meal);
-            const range = fmtT(Math.min(...b.map((x) => x.start))) + " – " + fmtT(Math.max(...b.map((x) => x.end)));
-            return (
-              <button type="button" role="listitem" key={p.key} className="st-preset" onClick={() => applyPreset(p)}>
-                <strong>{p.name}</strong>
-                <span className="st-preset-range">{range}</span>
-                <span className="st-preset-note">{p.note}</span>
-              </button>
-            );
-          })}
-        </div>
+          <main className="min-w-0">
+            {/* ---------- overview ---------- */}
+            <Section id="st-overview" kicker="01 / Overview" title="Your trading day" sub="Everything below updates this view live.">
+              <div className={cx(UI.panel, "p-5 sm:p-6")}>
+                {stats ? (
+                  <div className="grid gap-6 md:grid-cols-[minmax(0,.85fr)_minmax(0,1.15fr)] md:items-center">
+                    <div>
+                      <div className="st-mono text-4xl font-medium tracking-tight sm:text-5xl">
+                        {fmtT(stats.lo)}
+                        <span className={cx("mx-2 text-xl", UI.dim)}>→</span>
+                        {fmtT(stats.hi)}
+                      </div>
+                      <p className={cx("mt-2 text-sm", UI.dim)}>
+                        {fmtDur(stats.span)} window · {stats.count} {stats.count === 1 ? "block" : "blocks"}
+                      </p>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <span className="st-mono rounded-full border border-[color:var(--line)] px-3 py-1 text-xs">
+                          <i className="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-[var(--c-trade)]" />
+                          {fmtDur(stats.trade)} trading
+                        </span>
+                        <span className="st-mono rounded-full border border-[color:var(--line)] px-3 py-1 text-xs">
+                          <i className="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-[var(--c-rest)]" />
+                          {fmtDur(stats.rest)} breaks
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <Timeline blocks={draft.blocks} />
+                      <div className={cx("mt-3 flex flex-wrap gap-4 text-[11px]", UI.dim)} aria-hidden="true">
+                        {Object.keys(TYPE_META).map((t) => (
+                          <span key={t} className="inline-flex items-center gap-1.5">
+                            <i className="h-1.5 w-1.5 rounded-full" style={{ background: `var(--c-${t})` }} />
+                            {t === "prep" ? "Prep / review" : TYPE_META[t].label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-lg font-medium">No blocks yet</div>
+                )}
+              </div>
+            </Section>
 
-        <h2 className="st-h2">Your routine<span>Times, titles and block types</span></h2>
+            {/* ---------- layouts ---------- */}
+            <Section id="st-layouts" kicker="02 / Layouts" title="Start from a layout" sub="One tap, then fine-tune below.">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5" role="list">
+                {PRESETS.map((p) => {
+                  const bl = buildBlocks(p.shift, p.meal);
+                  const range = fmtT(Math.min(...bl.map((x) => x.start))) + " – " + fmtT(Math.max(...bl.map((x) => x.end)));
+                  return (
+                    <button
+                      type="button"
+                      role="listitem"
+                      key={p.key}
+                      onClick={() => applyPreset(p)}
+                      className={cx(UI.panel, "flex flex-col gap-1 p-4 text-left transition hover:-translate-y-0.5 hover:border-[color:var(--line-2)] hover:bg-[var(--panel-2)]")}
+                    >
+                      <span className="text-sm font-semibold">{p.name}</span>
+                      <span className="st-mono text-xs text-[color:var(--accent)]">{range}</span>
+                      <span className={cx("text-xs", UI.dim)}>{p.note}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </Section>
 
-        <div className="st-glass st-tools">
-          <div className="st-tool-row">
-            <div className="st-tool-txt">
-              <strong>Move everything after a change</strong>
-              <span>When on, changing a block's end time pushes every block after it by the same amount.</span>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={ripple}
-              aria-label="Move later blocks when a block's end time changes"
-              className={`st-switch${ripple ? " on" : ""}`}
-              onClick={() => setRipple((r) => !r)}
-            />
-          </div>
-          <div className="st-tool-row stack">
-            <div className="st-tool-txt">
-              <strong>Shift the whole day</strong>
-              <span>Slide every block earlier or later, keeping the gaps.</span>
-            </div>
-            <div className="st-shift">
-              {[-60, -15, 15, 60].map((d) => (
-                <button type="button" key={d} onClick={() => shiftAll(d)} disabled={blocksEmpty}>
-                  {d > 0 ? "+" : "−"}
-                  {Math.abs(d) === 60 ? "1h" : Math.abs(d) + "m"}
+            {/* ---------- routine ---------- */}
+            <Section id="st-routine" kicker="03 / Routine" title="Your routine" sub="Times, titles and block types. Every block is yours to shape.">
+              <div className={cx(UI.panel, "divide-y divide-[color:var(--line)] px-5")}>
+                <div className="flex items-center justify-between gap-4 py-4">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">Move everything after a change</div>
+                    <p className={cx("mt-0.5 text-xs leading-relaxed", UI.dim)}>
+                      When on, changing a block's end time pushes every block after it by the same amount.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={ripple}
+                    aria-label="Move later blocks when a block's end time changes"
+                    onClick={() => setRipple((r) => !r)}
+                    className={cx(
+                      "relative h-6 w-11 shrink-0 rounded-full border transition",
+                      ripple ? "border-transparent bg-[var(--accent)]" : "border-[color:var(--line-2)] bg-[var(--panel-2)]"
+                    )}
+                  >
+                    <span
+                      className={cx(
+                        "absolute left-[3px] top-[3px] h-4 w-4 rounded-full transition-transform duration-300",
+                        ripple ? "translate-x-5 bg-[var(--accent-ink)]" : "bg-[var(--dim)]"
+                      )}
+                    />
+                  </button>
+                </div>
+
+                <div className="py-4">
+                  <div className="text-sm font-medium">Shift the whole day</div>
+                  <p className={cx("mb-3 mt-0.5 text-xs", UI.dim)}>Slide every block earlier or later, keeping the gaps.</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[-60, -15, 15, 60].map((d) => (
+                      <button type="button" key={d} onClick={() => shiftAll(d)} disabled={blocksEmpty} className={cx(UI.btn, UI.ghost, "st-mono !px-0")}>
+                        {d > 0 ? "+" : "−"}
+                        {Math.abs(d) === 60 ? "1h" : Math.abs(d) + "m"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {outOfOrder && (
+                  <div className="flex items-center justify-between gap-4 py-4">
+                    <div>
+                      <div className="text-sm font-medium">Blocks are out of order</div>
+                      <p className={cx("mt-0.5 text-xs", UI.dim)}>They sort themselves when you save, or sort them now.</p>
+                    </div>
+                    <button type="button" className={cx(UI.btn, UI.ghost)} onClick={sortByTime}>
+                      Sort by time
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {check.errors > 0 && (
+                <Banner tone="error">
+                  Fix {check.errors} {check.errors === 1 ? "issue" : "issues"} below before you can save.
+                </Banner>
+              )}
+              {check.errors === 0 && check.warns > 0 && (
+                <Banner tone="warn">Some blocks overlap. You can still save, but the app shows the earlier block as "now" while they overlap.</Banner>
+              )}
+              {check.noTrade && (
+                <Banner tone="warn">No trading block yet. Set a block's type to Trading so P&L logging appears during it.</Banner>
+              )}
+
+              <div className="mt-5">
+                <InsertSlot open={insertAt === -1} onOpen={() => setInsertAt(-1)} onClose={() => setInsertAt(null)} onPick={(t) => insertBlock(-1, t)} />
+                {draft.blocks.map((b, i) => (
+                  <React.Fragment key={b.id}>
+                    <BlockCard
+                      b={b}
+                      issues={check.byId[b.id] || []}
+                      showNotes={!!notesOpen[b.id]}
+                      showPicker={pickerFor === b.id}
+                      onUpdate={(patch) => updateBlock(b.id, patch)}
+                      onNudge={(d) => nudgeLength(b.id, d)}
+                      onToggleNotes={() => setNotesOpen((n) => ({ ...n, [b.id]: !n[b.id] }))}
+                      onTogglePicker={() => setPickerFor((p) => (p === b.id ? null : b.id))}
+                      onDuplicate={() => duplicateBlock(b.id)}
+                      onDelete={() => deleteBlock(b.id)}
+                    />
+                    <InsertSlot
+                      bottom={i === draft.blocks.length - 1}
+                      open={insertAt === i}
+                      onOpen={() => setInsertAt(i)}
+                      onClose={() => setInsertAt(null)}
+                      onPick={(t) => insertBlock(i, t)}
+                    />
+                  </React.Fragment>
+                ))}
+                {blocksEmpty && (
+                  <div className={cx("py-4 text-center text-sm", UI.dim)}>
+                    <p className="mb-3">Your routine is empty. Add a block or load a layout above to get started.</p>
+                    <InsertSlot bottom open={insertAt === 0} onOpen={() => setInsertAt(0)} onClose={() => setInsertAt(null)} onPick={(t) => insertBlock(-1, t)} />
+                  </div>
+                )}
+              </div>
+            </Section>
+
+            {/* ---------- headings ---------- */}
+            <Section id="st-headings" kicker="04 / Setup" title="Headings and check-in" sub="Blocks before your first trading block form the first group, blocks after your last form the last.">
+              <div className={cx(UI.panel, "divide-y divide-[color:var(--line)] px-5")}>
+                {[
+                  ["prep", "Before trading"],
+                  ["session", "During trading"],
+                  ["close", "After trading"],
+                ].map(([k, hint]) => (
+                  <label key={k} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+                    <span className="text-sm font-medium">
+                      {hint}
+                      <em className={cx("st-mono mt-0.5 block text-[11px] font-normal not-italic", UI.dim)}>
+                        {groups[k].length ? `${groupRange(groups[k])} · ${groups[k].length} ${groups[k].length === 1 ? "block" : "blocks"}` : "No blocks"}
+                      </em>
+                    </span>
+                    <input
+                      type="text"
+                      maxLength={24}
+                      value={draft.titles[k]}
+                      placeholder={DEFAULT_TITLES[k]}
+                      className={cx(UI.field, "w-full sm:w-60")}
+                      onChange={(e) => setTitle(k, e.target.value)}
+                    />
+                  </label>
+                ))}
+                <label className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+                  <span className="text-sm font-medium">
+                    Daily goal check-in
+                    <em className={cx("mt-0.5 block text-[11px] font-normal not-italic", UI.dim)}>When the goal popup reviews your day</em>
+                  </span>
+                  <input
+                    type="time"
+                    step={300}
+                    value={toTimeValue(Number.isFinite(draft.goalCheck) ? draft.goalCheck : DEFAULT_GOAL_CHECK)}
+                    className={cx(UI.field, "st-mono w-full sm:w-60")}
+                    onChange={(e) => {
+                      const m = fromTimeValue(e.target.value);
+                      if (m !== null) setDraft((d) => ({ ...d, goalCheck: m }));
+                    }}
+                  />
+                </label>
+              </div>
+            </Section>
+
+            {/* ---------- appearance ---------- */}
+            <Section id="st-appearance" kicker="05 / Setup" title="Appearance" sub="Choose the look that suits your screen.">
+              <div role="radiogroup" aria-label="Theme" className="grid max-w-sm grid-cols-2 gap-2">
+                {[
+                  ["dark", "Dark", "moon"],
+                  ["light", "Light", "sun"],
+                ].map(([k, label, icon]) => (
+                  <button
+                    type="button"
+                    key={k}
+                    role="radio"
+                    aria-checked={theme === k}
+                    onClick={() => chooseTheme(k)}
+                    className={cx(
+                      UI.panel,
+                      "flex h-12 items-center justify-center gap-2 text-sm font-medium transition",
+                      theme === k
+                        ? "!border-[color:var(--accent)] text-[color:var(--fg)] shadow-[0_0_0_4px_var(--ring)]"
+                        : "text-[color:var(--dim)] hover:border-[color:var(--line-2)] hover:text-[color:var(--fg)]"
+                    )}
+                  >
+                    <Icon name={icon} size={16} /> {label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-12 flex">
+                <button
+                  type="button"
+                  onClick={resetDefault}
+                  className={cx("inline-flex items-center gap-2 text-xs underline underline-offset-4 transition hover:text-[color:var(--fg)]", UI.dim)}
+                >
+                  <Icon name="reset" size={14} /> Restore the original routine
                 </button>
-              ))}
-            </div>
-          </div>
-          {outOfOrder && (
-            <div className="st-tool-row">
-              <div className="st-tool-txt">
-                <strong>Blocks are out of order</strong>
-                <span>They sort themselves when you save, or you can sort them now.</span>
               </div>
-              <button type="button" className="st-btn small" onClick={sortByTime}>Sort by time</button>
-            </div>
-          )}
-        </div>
-
-        {check.errors > 0 && (
-          <div className="st-banner error" role="alert">
-            <Icon name="alert" size={16} /> Fix {check.errors} {check.errors === 1 ? "issue" : "issues"} below before you can save.
-          </div>
-        )}
-        {check.errors === 0 && check.warns > 0 && (
-          <div className="st-banner warn">
-            <Icon name="alert" size={16} /> Some blocks overlap. You can still save, but the app shows the earlier block as "now" while they overlap.
-          </div>
-        )}
-        {check.noTrade && (
-          <div className="st-banner warn">
-            <Icon name="alert" size={16} /> No trading block yet. Set a block's type to Trading so P&L logging appears during it.
-          </div>
-        )}
-
-        <div className="st-list">
-          <InsertSlot open={insertAt === -1} onOpen={() => setInsertAt(-1)} onClose={() => setInsertAt(null)} onPick={(t) => insertBlock(-1, t)} />
-          {draft.blocks.map((b, i) => (
-            <React.Fragment key={b.id}>
-              <BlockCard
-                b={b}
-                issues={check.byId[b.id] || []}
-                showNotes={!!notesOpen[b.id]}
-                showPicker={pickerFor === b.id}
-                onUpdate={(patch) => updateBlock(b.id, patch)}
-                onNudge={(d) => nudgeLength(b.id, d)}
-                onToggleNotes={() => setNotesOpen((n) => ({ ...n, [b.id]: !n[b.id] }))}
-                onTogglePicker={() => setPickerFor((p) => (p === b.id ? null : b.id))}
-                onDuplicate={() => duplicateBlock(b.id)}
-                onDelete={() => deleteBlock(b.id)}
-              />
-              <InsertSlot bottom={i === draft.blocks.length - 1} open={insertAt === i} onOpen={() => setInsertAt(i)} onClose={() => setInsertAt(null)} onPick={(t) => insertBlock(i, t)} />
-            </React.Fragment>
-          ))}
-          {blocksEmpty && (
-            <div className="st-empty">
-              <p>Your routine is empty. Add a block or load a layout above to get started.</p>
-              <InsertSlot bottom open={insertAt === 0} onOpen={() => setInsertAt(0)} onClose={() => setInsertAt(null)} onPick={(t) => insertBlock(-1, t)} />
-            </div>
-          )}
-        </div>
-
-        <h2 className="st-h2">Headings and check-in<span>How the day is labelled</span></h2>
-        <div className="st-glass st-card">
-          <p className="st-card-note">
-            Blocks before your first trading block form the first group, blocks after your last trading block form the last.
-          </p>
-          {[
-            ["prep", "Before trading"],
-            ["session", "During trading"],
-            ["close", "After trading"],
-          ].map(([k, hint]) => (
-            <label className="st-field row" key={k}>
-              <span>
-                {hint}
-                <em>{groups[k].length ? `${groupRange(groups[k])} · ${groups[k].length} ${groups[k].length === 1 ? "block" : "blocks"}` : "No blocks"}</em>
-              </span>
-              <input
-                type="text"
-                maxLength={24}
-                value={draft.titles[k]}
-                placeholder={DEFAULT_TITLES[k]}
-                onChange={(e) => setTitle(k, e.target.value)}
-              />
-            </label>
-          ))}
-          <label className="st-field row">
-            <span>
-              Daily goal check-in
-              <em>When the goal popup reviews your day</em>
-            </span>
-            <input
-              type="time"
-              step={300}
-              value={toTimeValue(Number.isFinite(draft.goalCheck) ? draft.goalCheck : DEFAULT_GOAL_CHECK)}
-              onChange={(e) => {
-                const m = fromTimeValue(e.target.value);
-                if (m !== null) setDraft((d) => ({ ...d, goalCheck: m }));
-              }}
-            />
-          </label>
-        </div>
-
-        <h2 className="st-h2">Appearance</h2>
-        <div className="st-glass st-card">
-          <div className="st-theme" role="radiogroup" aria-label="Theme">
-            {[
-              ["dark", "Dark", "moon"],
-              ["light", "Light", "sun"],
-            ].map(([k, label, icon]) => (
-              <button
-                type="button"
-                key={k}
-                role="radio"
-                aria-checked={theme === k}
-                className={theme === k ? "on" : ""}
-                onClick={() => chooseTheme(k)}
-              >
-                <Icon name={icon} size={16} /> {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="st-reset">
-          <button type="button" className="st-linkbtn" onClick={resetDefault}>
-            <Icon name="reset" size={14} /> Restore the original routine
-          </button>
+            </Section>
+          </main>
         </div>
       </div>
 
+      {/* ---------- toast ---------- */}
       {toast && (
-        <div className="st-toast" role="status" aria-live="polite">
-          <span>{toast.msg}</span>
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-[calc(88px+env(safe-area-inset-bottom,0px))] left-1/2 z-50 flex max-w-[calc(100vw-36px)] -translate-x-1/2 animate-[st-in_.2s_ease] items-center gap-4 rounded-full border border-[color:var(--line-2)] bg-[var(--pop)] px-4 py-2.5 text-sm shadow-2xl"
+        >
+          <span className="truncate">{toast.msg}</span>
           {toast.undo && (
             <button
               type="button"
+              className="shrink-0 font-semibold text-[color:var(--accent)]"
               onClick={() => {
                 toast.undo();
                 setToast(null);
@@ -917,15 +1248,28 @@ export default function Settings({ onBack } = {}) {
         </div>
       )}
 
-      <div className="st-savebar" role="region" aria-label="Save changes">
-        <div className={`st-status${check.errors > 0 || blocksEmpty ? " bad" : dirty ? " dirty" : ""}`}>
-          <span className="st-dot" aria-hidden="true" />
-          {statusText}
+      {/* ---------- save bar ---------- */}
+      <div
+        role="region"
+        aria-label="Save changes"
+        className="fixed bottom-[calc(14px+env(safe-area-inset-bottom,0px))] left-1/2 z-40 flex w-[min(calc(100%-28px),560px)] -translate-x-1/2 items-center gap-2 rounded-2xl border border-[color:var(--line-2)] bg-[var(--bar)] p-2 pl-4 shadow-2xl backdrop-blur-2xl"
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-2.5 text-sm">
+          <span
+            aria-hidden="true"
+            className={cx(
+              "h-2 w-2 shrink-0 rounded-full",
+              check.errors > 0 || blocksEmpty ? "bg-[var(--bad)]" : dirty ? "animate-pulse bg-[var(--accent)]" : "bg-[var(--ok)]"
+            )}
+          />
+          <span className="truncate font-medium">{statusText}</span>
         </div>
         {dirty && (
-          <button type="button" className="st-btn ghost small" onClick={discard}>Discard</button>
+          <button type="button" className={cx(UI.btn, UI.ghost, "!h-9")} onClick={discard}>
+            Discard
+          </button>
         )}
-        <button type="button" className="st-btn primary" onClick={save} disabled={saveDisabled}>
+        <button type="button" className={cx(UI.btn, UI.primary, "!h-9")} onClick={save} disabled={saveDisabled}>
           {!dirty && !blocksEmpty ? <Icon name="check" size={16} /> : null} Save schedule
         </button>
       </div>
@@ -935,15 +1279,9 @@ export default function Settings({ onBack } = {}) {
   );
 }
 
-function useLocalStorageState(key, initialValue) {
-  const [state, setState] = useState(() => readLS(key, initialValue));
-  useEffect(() => {
-    writeLS(key, state);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, state]);
-  return [state, setState];
-}
-
+// =====================================================================
+// token sheet: defines every CSS variable the Tailwind classes above read
+// =====================================================================
 const CSS = `
 .st-root{
 --bg:#07080b;--bg-glass:rgba(7,8,11,.82);--pop:#0d0f14;--bar:rgba(13,15,20,.84);
@@ -995,5 +1333,3 @@ mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 25%,transparent 78%);
 @keyframes st-fade{from{opacity:0;}to{opacity:1;}}
 @media (prefers-reduced-motion:reduce){.st-root *{animation:none !important;transition:none !important;}}
 `;
-
-
