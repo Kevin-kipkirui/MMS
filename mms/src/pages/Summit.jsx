@@ -1,21 +1,23 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 
 const LEVELS = [
-  [500, 40, 80, 0.08],
-  [1000, 80, 160, 0.16],
-  [2500, 200, 400, 0.4],
-  [5000, 400, 800, 0.8],
-  [10000, 800, 1600, 1.6],
-  [25000, 1500, 3000, 3],
-  [50000, 2500, 5000, 5],
-  [100000, 4000, 8000, 8],
-  [200000, 6000, 12000, 12],
-  [300000, 9000, 18000, 18],
+  [500, 40, 80],
+  [1000, 80, 160],
+  [2500, 200, 400],
+  [5000, 400, 800],
+  [10000, 800, 1600],
+  [25000, 1500, 3000],
+  [50000, 2500, 5000],
+  [100000, 4000, 8000],
+  [200000, 6000, 12000],
+  [300000, 9000, 18000],
 ];
 
 const KEY = "summitTracker.v2";
 const HISTORY_KEY = "td_history"; // shared with session.jsx, do not rename on either side
 const THEME_KEY = "td_theme"; // shared with session.jsx
+const RISK_KEY = "summitTracker.risk";
+const PIP_KEY = "summitTracker.pipValue";
 
 // ---------- storage + theme ----------
 function readHistory() {
@@ -60,6 +62,79 @@ const money = (n) => "$" + Math.abs(n).toLocaleString(undefined, { maximumFracti
 const fm = (n) => "$" + Math.round(n).toLocaleString();
 const levelOf = (b) => LEVELS.reduce((acc, l, k) => (b >= l[0] ? k : acc), 0);
 
+// ---------- position-size calculator ----------
+// lot = risk / (stopPips * pipValuePerLot), floored to 0.01 so you never exceed your risk.
+// The 1e-9 nudge stops float noise (e.g. 0.0799999) from dropping a whole step.
+function calcLot(risk, pips, pipVal) {
+  if (!(risk > 0 && pips > 0 && pipVal > 0)) return null;
+  const perLot = pips * pipVal;
+  const lot = Math.floor((risk / perLot) * 100 + 1e-9) / 100;
+  const actualRisk = lot * perLot;
+  return {
+    lot,
+    actualRisk,
+    minRisk: 0.01 * perLot,
+    tpPips: pips * 2,
+    target: actualRisk * 2,
+  };
+}
+
+const cleanNum = (v) => v.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1");
+
+function readNum(key) {
+  try {
+    const n = parseFloat(window.localStorage.getItem(key));
+    return n > 0 ? n : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function useRiskCalc(campRisk) {
+  const [riskInput, setRiskInput] = useState(() => {
+    if (typeof window === "undefined") return "";
+    const r = readNum(RISK_KEY);
+    return r ? String(r) : "";
+  });
+  const [pipInput, setPipInput] = useState(() => {
+    if (typeof window === "undefined") return "10";
+    const p = readNum(PIP_KEY);
+    return p ? String(p) : "10";
+  });
+  const [pips, setPipsState] = useState("");
+
+  const setRisk = (raw) => {
+    const v = cleanNum(raw);
+    setRiskInput(v);
+    try {
+      const n = parseFloat(v);
+      if (n > 0) window.localStorage.setItem(RISK_KEY, String(n));
+      else if (v === "") window.localStorage.removeItem(RISK_KEY);
+    } catch (e) {}
+  };
+
+  const setPipVal = (raw) => {
+    const v = cleanNum(raw);
+    setPipInput(v);
+    try {
+      const n = parseFloat(v);
+      if (n > 0) window.localStorage.setItem(PIP_KEY, String(n));
+    } catch (e) {}
+  };
+
+  const setPips = (raw) => setPipsState(cleanNum(String(raw)));
+
+  const customRisk = parseFloat(riskInput);
+  const isCustom = customRisk > 0;
+  const riskNum = isCustom ? customRisk : campRisk;
+  const pipVal = parseFloat(pipInput);
+  const stop = parseFloat(pips);
+
+  const result = useMemo(() => calcLot(riskNum, stop, pipVal), [riskNum, stop, pipVal]);
+
+  return { riskInput, setRisk, pips, setPips, pipInput, setPipVal, riskNum, isCustom, result };
+}
+
 const POINTS = LEVELS.map((_, i) => [
   50 + i * 67,
   262 - Math.pow(i / 9, 1.15) * 205 - (i % 2 ? 6 : 0),
@@ -92,7 +167,7 @@ function buildContributionWeeks(history, weeks = 26) {
 
 function cellColor(day) {
   if (!day || day.isFuture) return "var(--cell-future)";
-  if (!day.entry) return "var(--cell-empty)";
+  if (!day.entry) return "var(--cell-empty)"
   const net = day.entry.net || 0;
   if (net > 0) return net > 300 ? "#1e8a3c" : net > 100 ? "#2fa24f" : "#56c46f";
   if (net < 0) return net < -300 ? "#a3201c" : net < -100 ? "#c9342c" : "#e2665f";
@@ -204,6 +279,103 @@ function Mountain({ balance }) {
         <path d="M0-5v10M-4 8L0 4L4 8" stroke="#eef3f7" strokeWidth="2.4" fill="none" strokeLinecap="round" />
       </g>
     </svg>
+  );
+}
+
+const QUICK_PIPS = [3, 5, 8, 10, 15, 20, 30];
+
+function RiskCalculator({ calc, campNo, campRisk }) {
+  const { riskInput, setRisk, pips, setPips, pipInput, setPipVal, riskNum, isCustom, result } = calc;
+  const [copied, setCopied] = useState(false);
+
+  const ready = result && result.lot > 0;
+  const over = riskNum > campRisk;
+
+  const copy = () => {
+    if (!ready) return;
+    try {
+      navigator.clipboard.writeText(result.lot.toFixed(2));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1100);
+    } catch (e) {}
+  };
+
+  return (
+    <section className="sm-calc">
+      <div className="sm-calc-head">Risk per trade</div>
+      <div className="sm-calc-row">
+        <span className="sm-calc-label">$</span>
+        <input
+          id="sm-risk" type="text" inputMode="decimal" autoComplete="off"
+          value={riskInput} placeholder={String(campRisk)}
+          onChange={(e) => setRisk(e.target.value)}
+        />
+      </div>
+
+      <div className="sm-calc-head">Stop-loss</div>
+      <div className="sm-calc-row">
+        <input
+          id="sm-pips" type="text" inputMode="decimal" autoComplete="off"
+          value={pips} placeholder="0"
+          onChange={(e) => setPips(e.target.value)}
+        />
+        <span className="sm-calc-unit">pips</span>
+      </div>
+
+      <div className="sm-qp-row">
+        {QUICK_PIPS.map((p) => (
+          <button
+            key={p} type="button"
+            className={"sm-qp" + (String(p) === pips ? " on" : "")}
+            onClick={() => setPips(p)}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+
+      {over && (
+        <div className="sm-warn">
+          Above your Camp {campNo} limit of {fm(campRisk)} per trade
+        </div>
+      )}
+
+      <button type="button" className="sm-result" onClick={copy} disabled={!ready} aria-label="Copy lot size">
+        <div className="sm-result-label">{copied ? "Copied" : "Suggested lot size"}</div>
+        <div className="sm-result-lot">
+          {ready ? result.lot.toFixed(2) : "–"}
+        </div>
+        {!result && <div className="sm-result-hint">Enter a stop-loss in pips</div>}
+        {result && !ready && (
+          <div className="sm-result-hint">
+            Risk too small: 0.01 lot needs at least {money(result.minRisk)}
+          </div>
+        )}
+        {ready && (
+          <div className="sm-result-grid">
+            <div><b>{result.tpPips}</b><span>TP pips (1:2)</span></div>
+            <div><b>{money(result.actualRisk)}</b><span>Real risk</span></div>
+            <div><b>{money(result.target)}</b><span>Target</span></div>
+          </div>
+        )}
+      </button>
+
+      <div className="sm-calc-foot">
+        <div className="sm-pipval">
+          <label htmlFor="sm-pv">Pip value / 1.0 lot</label>
+          <span>$</span>
+          <input
+            id="sm-pv" type="text" inputMode="decimal" autoComplete="off"
+            value={pipInput} onChange={(e) => setPipVal(e.target.value)}
+          />
+        </div>
+        {isCustom && (
+          <button type="button" className="sm-reset" onClick={() => setRisk("")}>
+            Use camp risk
+          </button>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -333,6 +505,7 @@ export default function Summit({ onBack } = {}) {
 
   const current = levelOf(balance);
   const camp = LEVELS[current];
+  const calc = useRiskCalc(camp[1]);
   const atTop = current === 9;
   const nextCap = atTop ? null : LEVELS[current + 1][0];
   const pct = atTop
@@ -404,8 +577,11 @@ export default function Summit({ onBack } = {}) {
         <div className="sm-rules">
           <div className="sm-rule"><div className="l">Risk per trade</div><div className="v neg">{fm(camp[1])}</div></div>
           <div className="sm-rule"><div className="l">Target</div><div className="v pos">{fm(camp[2])}</div></div>
-          <div className="sm-rule"><div className="l">Lot size</div><div className="v">{camp[3].toFixed(2)}</div></div>
+          <div className="sm-rule"><div className="l">Lot size</div><div className="v">{calc.result && calc.result.lot > 0 ? calc.result.lot.toFixed(2) : "–"}</div></div>
         </div>
+
+        <h2 className="sm-section">Position size<span className="sub">1:2 risk-reward · lot adapts to your stop</span></h2>
+        <RiskCalculator calc={calc} campNo={current + 1} campRisk={camp[1]} />
 
         <h2 className="sm-section">Trading activity<span className="sub">last 6 months, from your journal</span></h2>
         <section className="sm-card">
@@ -427,7 +603,6 @@ export default function Summit({ onBack } = {}) {
                   <div className="sm-camp-meta">
                     <span>Risk {fm(r[1])}</span>
                     <span>Target {fm(r[2])}</span>
-                    <span>Lot {r[3].toFixed(2)}</span>
                   </div>
                 </div>
                 {state === "locked" && k === current + 1 && <div className="sm-camp-next">{fm(r[0] - balance)} away</div>}
@@ -599,6 +774,38 @@ background:linear-gradient(180deg,#ffffff 20%,#c3cce6 100%);
 .sm-camp.locked{opacity:.6}
 .sm-camp.now{border-color:var(--amber);box-shadow:0 0 0 1px var(--amber) inset,0 0 28px 2px var(--glow-amber)}
 .sm-camp.now .sm-camp-badge{background:var(--amber-dim);border-color:var(--amber);color:var(--accent-text)}
+
+/* position-size calculator */
+.sm-calc{display:flex;flex-direction:column;gap:14px}
+.sm-calc-inputs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sm-field{display:flex;flex-direction:column;gap:6px}
+.sm-field label{font-size:11px;font-weight:600;color:var(--muted);padding-left:4px}
+.sm-field .box{display:flex;align-items:center;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-input);padding:0 14px;transition:border-color .15s,box-shadow .15s}
+.sm-field .box:focus-within{border-color:var(--amber);box-shadow:0 0 0 3px var(--amber-dim)}
+.sm-field .box i{font-style:normal;font-size:13px;font-weight:700;color:var(--muted)}
+.sm-field input{flex:1;min-width:0;width:100%;background:transparent;border:none;color:var(--text);font:inherit;font-size:22px;font-weight:800;letter-spacing:-.02em;padding:13px 6px;font-variant-numeric:tabular-nums}
+.sm-field input:focus,.sm-field input:focus-visible{outline:none}
+.sm-field input::placeholder{color:var(--muted);opacity:.5}
+.sm-qp-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.sm-qp{min-width:44px;padding:8px 12px;border-radius:var(--r-pill);border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:13px;font-weight:700;cursor:pointer;font-variant-numeric:tabular-nums;transition:transform .08s}
+.sm-qp:active{transform:scale(.94)}
+.sm-qp.on{background:var(--btn);color:var(--on-accent);border-color:transparent;box-shadow:0 8px 18px -8px var(--glow-amber)}
+.sm-warn{font-size:12px;font-weight:600;color:var(--rose);text-align:center}
+.sm-result{display:block;width:100%;border:1px solid rgba(255,255,255,.28);border-radius:22px;padding:18px 14px 16px;background:var(--hero);color:#fff;text-align:center;cursor:pointer;box-shadow:var(--hero-shadow);position:relative;overflow:hidden}
+.sm[data-theme="dark"] .sm-result{border-color:rgba(232,201,122,.30)}
+.sm-result:disabled{cursor:default}
+.sm-result-label{font-size:12px;font-weight:600;color:rgba(255,255,255,.8)}
+.sm-result-lot{font-size:clamp(46px,15vw,68px);font-weight:800;letter-spacing:-.04em;line-height:1.05;margin:4px 0 2px;font-variant-numeric:tabular-nums}
+.sm-result-hint{font-size:12.5px;color:rgba(255,255,255,.8);margin-top:4px}
+.sm-result-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.sm-result-grid>div{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.22);border-radius:14px;padding:9px 4px}
+.sm-result-grid b{display:block;font-size:15px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.sm-result-grid span{font-size:10.5px;font-weight:600;color:rgba(255,255,255,.78)}
+.sm-calc-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.sm-pipval{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);font-weight:600}
+.sm-pipval span{font-weight:700}
+.sm-pipval input{width:64px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;color:var(--text);font:inherit;font-size:13px;font-weight:700;padding:6px 8px;font-variant-numeric:tabular-nums}
+.sm-reset{background:none;border:none;color:var(--accent-text);font-size:11.5px;font-weight:700;cursor:pointer;padding:4px 2px}
 
 /* camp-up toast */
 .sm-toast{position:fixed;left:50%;top:calc(18px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:80;display:flex;align-items:center;gap:8px;padding:12px 20px;border-radius:var(--r-pill);background:var(--btn);color:var(--on-accent);font-size:14px;font-weight:800;box-shadow:0 18px 36px -12px var(--glow-amber);animation:sm-toast .35s cubic-bezier(.2,1.2,.4,1)}
