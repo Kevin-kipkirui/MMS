@@ -5,6 +5,7 @@ import Summit from "./pages/Summit";
 import Performance from "./pages/Perfomance";
 import News from "./pages/News";
 import Notepad from "./pages/Notepad";
+import Strategies from "./pages/Strategies";
 import Settings from "./pages/Settings";
 import { supabase } from "./lib/supabase";
 
@@ -48,6 +49,7 @@ function App() {
       else if (hash === "performance") setView("performance");
       else if (hash === "news") setView("news");
       else if (hash === "notepad") setView("notepad");
+      else if (hash === "strategies") setView("strategies");
       else if (hash === "settings") setView("settings");
       else if (hash === "session" || !hash) setView("session");
     };
@@ -79,6 +81,12 @@ function App() {
     if (!isUnlocked) return;
     setView("notepad");
     if (typeof window !== "undefined") window.location.hash = "#notepad";
+  };
+
+  const openStrategies = () => {
+    if (!isUnlocked) return;
+    setView("strategies");
+    if (typeof window !== "undefined") window.location.hash = "#strategies";
   };
 
   const openSettings = () => {
@@ -116,6 +124,10 @@ function App() {
     return <Notepad onBack={backToSession} />;
   }
 
+  if (view === "strategies") {
+    return <Strategies onBack={backToSession} />;
+  }
+
   if (view === "settings") {
     return <Settings onBack={backToSession} />;
   }
@@ -126,6 +138,7 @@ function App() {
       onOpenPerformance={openPerformance}
       onOpenNews={openNews}
       onOpenNotepad={openNotepad}
+      onOpenStrategies={openStrategies}
       onOpenSettings={openSettings}
     />
   );

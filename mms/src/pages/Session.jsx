@@ -193,6 +193,10 @@ const isBreakEven = (v) => Math.abs(v) < BE_LIMIT;
 
 // ---------- day breakdown helpers ----------
 const fmtClock = (m) => (m == null ? "--:--" : pad(Math.floor(m / 60)) + ":" + pad(m % 60));
+const fmtClock12 = (m) => {
+  const h = Math.floor(m / 60);
+  return (h % 12 || 12) + ":" + pad(m % 60) + " " + (h >= 12 ? "PM" : "AM");
+};
 
 // Which trading block a trade belongs to, based on the minute it was logged
 function blockNameFor(m, blocks) {
@@ -321,7 +325,7 @@ const CONFETTI_COLORS = ["#8dffc0", "#ffd36b", "#7ab6ff", "#ff9ab0", "#ffffff", 
 function Confetti() {
   const pieces = useMemo(
     () =>
-      Array.from({ length: 56 }, () => ({
+      Array.from({ length: typeof window !== "undefined" && window.innerWidth < 600 ? 32 : 56 }, () => ({
         left: Math.random() * 100,
         delay: Math.random() * 0.9,
         dur: 2.6 + Math.random() * 2.2,
@@ -366,21 +370,19 @@ function GoalPopup({ popup, onClose }) {
         aria-modal="true"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="ts-emoji">{popup.emoji}</div>
+        {popup.emoji}
 
-        <div className="ts-kicker">{popup.kicker}</div>
+        {popup.kicker}
 
-        <h1>{popup.title}</h1>
+        {popup.title}
 
-        <div className="ts-figure">{popup.figure}</div>
+        {popup.figure}
 
-        <div className="ts-sub">{popup.sub}</div>
+        {popup.sub}
 
-        <p className="ts-msg">{popup.msg}</p>
+        {popup.msg}
 
-        <button onClick={onClose} className="ts-btn-primary">
-          {hit ? "Let's go 🔥" : "Got it"}
-        </button>
+        {hit ? "Let's go 🔥" : "Got it"}
       </div>
     </>
   );
@@ -921,6 +923,7 @@ const MENU_ICONS = {
   perf: ["M22 7 13.5 15.5 8.5 10.5 2 17", "M16 7h6v6"],
   news: ["M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2", "M18 14h-8", "M15 18h-5", "M10 6h8v4h-8z"],
   notes: ["M12 20h9", "M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"],
+  strategies: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", "M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10z", "M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"],
   settings: [
     "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
     "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z",
@@ -940,7 +943,7 @@ function MIcon({ name }) {
   );
 }
 
-function HeaderMenu({ theme, onToggleTheme, onSummit, onPerformance, onNews, onNotepad, onSettings = () => {}, onLogout }) {
+function HeaderMenu({ theme, onToggleTheme, onSummit, onPerformance, onNews, onNotepad, onStrategies = () => {}, onSettings = () => {}, onLogout }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const btnRef = useRef(null);
@@ -1026,6 +1029,7 @@ function HeaderMenu({ theme, onToggleTheme, onSummit, onPerformance, onNews, onN
           <Item icon="perf" label="Performance" onClick={run(onPerformance)} />
           <Item icon="news" label="News" onClick={run(onNews)} />
           <Item icon="notes" label="Notepad" onClick={run(onNotepad)} />
+          <Item icon="strategies" label="Strategies" onClick={run(onStrategies)} />
           <Item icon="settings" label="Settings" onClick={run(onSettings)} />
 
           <div className="ts-menu-sep" role="separator" />
@@ -1160,7 +1164,7 @@ function HoloClock({ dayStart, dayEnd }) {
 const ce = React.createElement;
 
 // ---------- floating news + P&L ticker ----------
-function Ticker({ news, nowMin, netPnl, trades, tradeLimit, maxLoss, fmt, money, loading }) {
+function Ticker({ news, nowMin, netPnl, trades, maxLoss, fmt, money, loading }) {
   const items = [];
 
   if (news.length === 0) {
@@ -1186,7 +1190,7 @@ function Ticker({ news, nowMin, netPnl, trades, tradeLimit, maxLoss, fmt, money,
 
   const tone = netPnl > 0 ? "pos" : netPnl < 0 ? "neg" : "";
   items.push({ key: "pnl", kind: "stat", label: "Net today", value: fmt(netPnl), tone });
-  items.push({ key: "trades", kind: "stat", label: "Trades", value: trades + "/" + tradeLimit });
+  items.push({ key: "trades", kind: "stat", label: "Trades", value: String(trades) });
   items.push({
     key: "room",
     kind: "stat",
@@ -1253,7 +1257,7 @@ function Ticker({ news, nowMin, netPnl, trades, tradeLimit, maxLoss, fmt, money,
 }
 
 // ---------- component ----------
-export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, onOpenNotepad, onOpenSettings } = {}) {
+export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, onOpenNotepad, onOpenStrategies, onOpenSettings } = {}) {
   const [authUser, setAuthUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
 
@@ -1741,13 +1745,19 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
       return;
     }
 
-    if (!goalCelebrated && !goalEvaluated && nowMin >= sched.goalCheck) {
+    if (
+      !goalCelebrated &&
+      !goalEvaluated &&
+      day.pnl.length > 0 &&
+      nowMin >= sched.goalCheck &&
+      nowMin < sched.goalCheck + 180
+    ) {
       setGoalEvaluated(true);
       const kind = netPnl < 0 ? "red" : netPnl >= dailyTarget / 2 ? "half" : "low";
-      setGoalPopup(buildGoalPopup(kind, dailyTarget, netPnl, money, fmt, fmtClock(sched.goalCheck)));
+      setGoalPopup(buildGoalPopup(kind, dailyTarget, netPnl, money, fmt, fmtClock12(sched.goalCheck)));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [netPnl, nowMin, dailyTarget, goalCelebrated, goalEvaluated, goalPopup, hydrated, syncState, sched.goalCheck]);
+  }, [netPnl, nowMin, dailyTarget, goalCelebrated, goalEvaluated, goalPopup, hydrated, syncState, sched.goalCheck, day.pnl.length]);
 
   // ---------- scroll-to-now ----------
   const scrollToNow = useCallback(
@@ -1844,6 +1854,13 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
       window.location.hash = "notepad";
     }
   };
+  const handleGoToStrategies = () => {
+    if (typeof onOpenStrategies === "function") {
+      onOpenStrategies();
+    } else if (typeof window !== "undefined") {
+      window.location.hash = "strategies";
+    }
+  };
   const handleGoToSettings = () => {
     if (typeof onOpenSettings === "function") {
       onOpenSettings();
@@ -1923,7 +1940,6 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
   };
 
   const openLossEdit = () => setEditModal("loss");
-  const openCapEdit = () => setEditModal("cap");
   const openGoalEdit = () => setEditModal("goal");
 
   const startEditTarget = () => {
@@ -2118,7 +2134,6 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
         nowMin={nowMin}
         netPnl={netPnl}
         trades={day.pnl.length}
-        tradeLimit={tradeLimit}
         maxLoss={maxLoss}
         fmt={fmt}
         money={money}
@@ -2139,6 +2154,7 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
               onPerformance={handleGoToPerformance}
               onNews={handleGoToNews}
               onNotepad={handleGoToNotepad}
+              onStrategies={handleGoToStrategies}
               onSettings={handleGoToSettings}
               onLogout={handleLogout}
             />
@@ -2253,22 +2269,19 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
             </div>
           </div>
 
-          <div className={`counter${day.pnl.length >= tradeLimit ? " over" : ""}`} id="tradeCounter">
+          <div className="counter" id="tradeCounter">
             <div className="label">
               <span>Trades closed</span>
-              <button className="limitset" onClick={openCapEdit}>edit cap</button>
             </div>
             <div className="row">
-              <div><span className="num">{day.pnl.length}</span> <span className="maxof">/ <span>{tradeLimit}</span></span></div>
+              <div><span className="num">{day.pnl.length}</span></div>
             </div>
             <div className="row" style={{ marginTop: 10 }}>
               <div><span className="num">{wins}{"\u2013"}{losses}{"\u2013"}{breakevens}</span></div>
             </div>
-            <div className="pnl-trades">
-              {day.pnl.length === 0 ? (
-                <span className="pnl-meterlbl">No closed trades yet.</span>
-              ) : (
-                day.pnl.map((v, i) => (
+            {day.pnl.length > 0 && (
+              <div className="pnl-trades">
+                {day.pnl.map((v, i) => (
                   <span className={`chip ${isBreakEven(v) ? "be" : v > 0 ? "win" : "loss"}`} key={i}>
                     <span>{fmt(v)}</span>
                     {day.shots && day.shots[i] && (
@@ -2276,9 +2289,9 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
                     )}
                     <button aria-label={"Remove result " + fmt(v)} onClick={() => removeResult(i)}>&times;</button>
                   </span>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -2302,7 +2315,7 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
               <div className="pnl-meterlbl">
                 {goalHit
                   ? "Goal reached. Protect the day and stop on time."
-                  : `${money(dailyTarget - netPnl)} to go today. Check-in at ${fmtClock(sched.goalCheck)}.`}
+                  : `${money(dailyTarget - netPnl)} to go today. Check-in at ${fmtClock12(sched.goalCheck)}.`}
               </div>
             </>
           ) : (
@@ -3207,6 +3220,14 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 .ts-goal.low .ts-goal-figure{color:var(--text);}
 .ts-goal.red .ts-goal-figure{color:var(--rose);}
 .ts-goal-btn{width:100%;}
+.ts-goal{max-height:calc(100dvh - 40px);overflow-y:auto;overscroll-behavior:contain;}
+@media (max-width:480px){
+  .ts-goal-backdrop{padding:14px;}
+  .ts-goal{padding:22px 18px 18px;}
+  .ts-goal-emoji{font-size:44px;}
+  .ts-goal-title{font-size:21px;}
+  .ts-goal-figure{font-size:34px;overflow-wrap:anywhere;}
+}
 
 /* ---------- confetti ---------- */
 .ts-confetti{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:130;}
