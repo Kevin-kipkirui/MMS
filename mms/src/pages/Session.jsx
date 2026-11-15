@@ -3584,4 +3584,213 @@ overflow:visible;
   .ts-root .ts-dock{width:min(calc(100% - 28px),520px);}
 }
 
+/* =====================================================
+   REDESIGN · DARK  (black + amber)
+   ===================================================== */
+.ts-root{
+--bg-grad:linear-gradient(180deg,#0b0b11 0%,#07070b 55%,#040408 100%);
+--surface:linear-gradient(180deg,rgba(255,255,255,.05) 0%,rgba(255,255,255,0) 40%),linear-gradient(160deg,#171821,#0d0e14);
+--surface-2:rgba(255,255,255,.06);
+--border:rgba(255,255,255,.08);
+--text:#f6f3ec; --muted:#9a968c;
+--amber:#ffb41f; --amber-dim:rgba(255,180,31,.16);
+--accent-text:#ffc85a;
+--teal:#3fe0a0; --teal-dim:rgba(63,224,160,.14);
+--rose:#ff6b6b; --rose-dim:rgba(255,107,107,.15);
+--warn:#ffa94d; --warn-dim:rgba(255,169,77,.16);
+--on-accent:#1a1100;
+--focus-ring:#ffb41f;
+--orb-1:rgba(255,180,31,.20); --orb-2:rgba(255,140,20,.10); --orb-3:rgba(255,255,255,.03);
+--hero:linear-gradient(155deg,#1e1f29 0%,#12131a 55%,#0a0a10 100%);
+--hero-shadow:0 1px 0 rgba(255,255,255,.10) inset,0 30px 60px -26px rgba(0,0,0,.95),0 0 46px -12px rgba(255,180,31,.22);
+--hero-ink:#1a1100;
+--btn:linear-gradient(180deg,#ffc93c,#f39c12);
+--meter:linear-gradient(90deg,#d98200,#ffc93c);
+--modal-bg:#12131a;
+--blur:blur(18px) saturate(125%);
+--shadow-card:0 1px 0 rgba(255,255,255,.07) inset,0 24px 46px -24px rgba(0,0,0,.95);
+--shadow-card-hover:0 1px 0 rgba(255,255,255,.10) inset,0 28px 52px -18px rgba(0,0,0,1);
+--glow-amber:rgba(255,180,31,.34); --glow-rose:rgba(255,107,107,.38);
+--dock-bg:rgba(14,15,21,.92);
+--r-card:28px; --r-input:16px;
+--menu-bg:rgba(14,15,21,.97); --menu-hover:rgba(255,255,255,.06); --menu-sep:rgba(255,255,255,.10);
+--ck-bg:rgba(14,15,21,.9); --ck-border:rgba(255,180,31,.32); --ck-ink:#f6f3ec; --ck-dim:#9a968c;
+--ck-shadow:0 1px 0 rgba(255,255,255,.07) inset,0 14px 28px -14px rgba(0,0,0,.9),0 0 22px -8px rgba(255,180,31,.30);
+}
+
+/* ambient amber glow (replaces the old gold glow) */
+.ts-root:not([data-theme="light"])::after{
+  content:""; position:fixed; left:0; right:0; top:0; height:520px; pointer-events:none; z-index:0;
+  background:
+    radial-gradient(520px 260px at 92% -40px,rgba(255,180,31,.22),transparent 70%),
+    radial-gradient(520px 280px at 0% 8%,rgba(255,140,20,.08),transparent 70%);
+  -webkit-mask-image:none; mask-image:none; background-size:auto;
+}
+.ts-root:not([data-theme="light"])::before{
+  background:
+    radial-gradient(640px 420px at 100% 0%,var(--orb-1),transparent 70%),
+    radial-gradient(700px 520px at 0% 100%,var(--orb-2),transparent 70%);
+}
+
+/* hero: black glass with an amber rim */
+.ts-root:not([data-theme="light"]) .ts-target-card{border-color:rgba(255,180,31,.34);}
+.ts-root:not([data-theme="light"]) .ts-target-card::after{background:radial-gradient(420px 220px at 100% -10%,rgba(255,180,31,.28),transparent 65%);}
+.ts-root:not([data-theme="light"]) .ts-target-fill{background:linear-gradient(90deg,#ffb41f,#ffd76a);}
+.ts-root:not([data-theme="light"]) .ts-target-card .limitset,
+.ts-root:not([data-theme="light"]) .ts-chip{background:rgba(255,180,31,.12);border-color:rgba(255,180,31,.30);color:#ffe3a1;}
+
+/* daily goal = the glowing amber card */
+.ts-root:not([data-theme="light"]) .goalcard{
+  --text:#1a1100; --muted:rgba(26,17,0,.66); --surface-2:rgba(26,17,0,.10); --border:rgba(26,17,0,.14);
+  --teal:#0b6b3f; --rose:#a8201a; --meter:linear-gradient(90deg,#1a1100,#5a3d00);
+  background:linear-gradient(135deg,#ffcf4a 0%,#f7a812 58%,#e8890c 100%);
+  color:#1a1100; border-color:rgba(255,220,130,.55);
+  box-shadow:0 1px 0 rgba(255,255,255,.35) inset,0 26px 50px -22px rgba(255,160,20,.55);
+}
+.ts-root:not([data-theme="light"]) .goalcard.hit{border-color:#0b6b3f;box-shadow:0 1px 0 rgba(255,255,255,.35) inset,0 26px 50px -20px rgba(255,160,20,.6),0 0 0 2px rgba(11,107,63,.35);}
+.ts-root:not([data-theme="light"]) .goalcard .pnl-meter-fill.goalfill.hit{background:linear-gradient(90deg,#0b6b3f,#14a35f);}
+.ts-root:not([data-theme="light"]) .goalcard .limitset{color:rgba(26,17,0,.75);}
+.ts-root:not([data-theme="light"]) .goalcard .limitset:hover{color:#1a1100;}
+
+/* news = the bright white card */
+.ts-root:not([data-theme="light"]) .newscard{
+  --text:#12141c; --muted:#6a6f80; --surface-2:rgba(18,20,28,.06); --border:rgba(18,20,28,.10);
+  --teal:#0b8f55; --rose:#d23a3a; --warn:#c77a10;
+  --teal-dim:rgba(11,143,85,.14); --rose-dim:rgba(210,58,58,.12); --warn-dim:rgba(199,122,16,.16);
+  --accent-text:#b86e00;
+  background:linear-gradient(180deg,#ffffff,#eef0f5); color:#12141c;
+  border-color:rgba(255,255,255,.6);
+  box-shadow:0 1px 0 #fff inset,0 26px 50px -26px rgba(0,0,0,.8);
+}
+.ts-root:not([data-theme="light"]) .newscard .newsflag{background:rgba(210,58,58,.10);}
+
+/* misc dark details */
+.ts-root:not([data-theme="light"]) .streak .n{background:linear-gradient(180deg,#ffd76a,#f39c12);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;}
+.ts-root:not([data-theme="light"]) .block.now{box-shadow:0 0 0 1px var(--amber) inset,0 0 32px 2px rgba(255,180,31,.24);}
+.ts-root:not([data-theme="light"]) .ts-dock{border-color:rgba(255,180,31,.16);box-shadow:0 1px 0 rgba(255,255,255,.08) inset,0 24px 48px -16px rgba(0,0,0,.9);}
+.ts-root:not([data-theme="light"]) .ts-dock-btn.active{box-shadow:0 8px 22px -8px rgba(255,180,31,.6);}
+.ts-root:not([data-theme="light"]) .ts-menu-item::before{background:var(--amber);}
+.ts-root:not([data-theme="light"]) .theme-toggle:hover{border-color:rgba(255,180,31,.55);}
+
+/* =====================================================
+   REDESIGN · LIGHT  (blue glass, fades into ambience)
+   ===================================================== */
+.ts-root[data-theme="light"]{
+--bg-grad:linear-gradient(180deg,#8fb0e6 0%,#b9cff1 34%,#dce8fa 70%,#eef4fd 100%);
+--surface:linear-gradient(160deg,rgba(255,255,255,.86),rgba(230,239,253,.66));
+--surface-2:rgba(255,255,255,.58);
+--border:rgba(40,80,150,.14);
+--text:#0f2147; --muted:#5a6f98;
+--amber:#f2a81d; --amber-dim:rgba(242,168,29,.26);
+--accent-text:#1d4f9f;
+--teal:#0a8f55; --teal-dim:rgba(10,143,85,.14);
+--rose:#d9423a; --rose-dim:rgba(217,66,58,.12);
+--warn:#c77a10; --warn-dim:rgba(199,122,16,.16);
+--on-accent:#2a1c00;
+--focus-ring:#2f6fd0;
+--orb-1:rgba(255,255,255,.85); --orb-2:rgba(50,100,215,.34); --orb-3:rgba(255,255,255,.5);
+--hero:linear-gradient(155deg,#2f61ad 0%,#1c4283 50%,#0f2a57 100%);
+--hero-shadow:0 1px 0 rgba(255,255,255,.30) inset,0 30px 56px -24px rgba(16,40,95,.75);
+--hero-ink:#0f2a57;
+--btn:linear-gradient(180deg,#fbd466,#eca21b);
+--meter:linear-gradient(90deg,#2f6fd0,#7fb0f0);
+--modal-bg:#eef4ff;
+--blur:blur(20px) saturate(140%);
+--shadow-card:0 1px 0 rgba(255,255,255,.95) inset,0 20px 40px -22px rgba(30,64,140,.45);
+--shadow-card-hover:0 1px 0 #fff inset,0 24px 46px -18px rgba(30,64,140,.55);
+--glow-amber:rgba(242,168,29,.40); --glow-rose:rgba(217,66,58,.28);
+--dock-bg:rgba(16,42,92,.92);
+--menu-bg:rgba(246,249,255,.97); --menu-hover:rgba(30,60,120,.07); --menu-sep:rgba(30,60,120,.13);
+--ck-bg:rgba(255,255,255,.78); --ck-border:rgba(30,60,120,.16); --ck-ink:#0f2147; --ck-dim:#5a6f98;
+--ck-shadow:0 1px 0 #fff inset,0 12px 26px -14px rgba(38,72,150,.55);
+}
+
+.ts-root[data-theme="light"]::before{
+  background:
+    radial-gradient(560px 380px at 92% 2%,var(--orb-1),transparent 70%),
+    radial-gradient(760px 520px at 0% 96%,var(--orb-2),transparent 70%),
+    radial-gradient(420px 320px at 6% 22%,var(--orb-3),transparent 70%);
+}
+/* soft white haze at the bottom so the blue "fades into" the ambience */
+.ts-root[data-theme="light"]::after{
+  content:""; position:fixed; left:0; right:0; bottom:0; height:320px; pointer-events:none; z-index:0;
+  background:linear-gradient(180deg,transparent,rgba(238,244,253,.65));
+}
+
+/* deep-navy glass cards (like the Send / Visa cards) */
+.ts-root[data-theme="light"] .counter:not(.goalcard),
+.ts-root[data-theme="light"] .stopband{
+  --text:#f4f8ff; --muted:rgba(226,236,255,.74);
+  --surface-2:rgba(255,255,255,.12); --border:rgba(255,255,255,.20);
+  --teal:#6dffb8; --rose:#ff9a8f; --warn:#ffc15a;
+  --teal-dim:rgba(109,255,184,.18); --rose-dim:rgba(255,154,143,.20); --warn-dim:rgba(255,193,90,.20);
+  --meter:linear-gradient(90deg,#7fb0f0,#cfe3ff);
+  background:linear-gradient(160deg,rgba(40,82,148,.94),rgba(20,48,102,.96));
+  color:var(--text); border-color:rgba(255,255,255,.22);
+  box-shadow:0 1px 0 rgba(255,255,255,.22) inset,0 22px 42px -20px rgba(12,34,84,.7);
+}
+.ts-root[data-theme="light"] .counter.over{border-color:#ff9a8f;}
+.ts-root[data-theme="light"] .chip.win{color:#6dffb8;border-color:rgba(109,255,184,.6);}
+.ts-root[data-theme="light"] .chip.loss{color:#ff9a8f;border-color:rgba(255,154,143,.6);}
+
+/* frosted white panels (like the Statistics sheet) */
+.ts-root[data-theme="light"] .goalcard,
+.ts-root[data-theme="light"] .newscard,
+.ts-root[data-theme="light"] .logcard,
+.ts-root[data-theme="light"] .ts-calcard,
+.ts-root[data-theme="light"] .daydetail,
+.ts-root[data-theme="light"] .streak,
+.ts-root[data-theme="light"] .block{
+  background:linear-gradient(160deg,rgba(255,255,255,.88),rgba(232,240,254,.68));
+  border-color:rgba(255,255,255,.75);
+}
+
+/* hero rim + chips */
+.ts-root[data-theme="light"] .ts-target-card{border-color:rgba(255,255,255,.38);}
+.ts-root[data-theme="light"] .ts-target-card::after{background:radial-gradient(420px 220px at 100% -10%,rgba(255,255,255,.34),transparent 65%);}
+
+/* dock: navy pill, yellow active tab */
+.ts-root[data-theme="light"] .ts-dock{border-color:rgba(255,255,255,.16);box-shadow:0 1px 0 rgba(255,255,255,.16) inset,0 24px 46px -16px rgba(10,28,70,.7);}
+.ts-root[data-theme="light"] .ts-dock-btn.active{box-shadow:0 8px 22px -8px rgba(242,168,29,.7);}
+.ts-root[data-theme="light"] .brand h1{color:#0f2147;}
+
+/* =====================================================
+REDESIGN · SHARED POLISH + RESPONSIVE
+===================================================== */
+.ts-root .counter .num{font-size:clamp(34px,10.5vw,46px);}
+.ts-root .goalcard .num{font-size:clamp(28px,8.5vw,36px);}
+.ts-root .ts-target-current{font-size:clamp(32px,10vw,48px);}
+.ts-root h2.section{font-size:clamp(17px,4.8vw,20px);}
+
+.ts-root .counter,.ts-root .stopband,.ts-root .newscard,.ts-root .logcard,
+.ts-root .ts-calcard,.ts-root .streak,.ts-root .ts-target-card{
+border-radius:var(--r-card);
+animation:ts-rise .45s cubic-bezier(.2,.8,.3,1) both;
+}
+@keyframes ts-rise{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+
+.ts-root .pnl-entry input,.ts-root .logcard input[type=number],.ts-root .logcard textarea,
+.ts-root .ts-cal-jump select{border-radius:var(--r-input);}
+.ts-root .pnl-entry button,.ts-root .savebtn{border-radius:var(--r-input);letter-spacing:.01em;}
+.ts-root .ts-dock{border-radius:32px;}
+.ts-root .ts-dock-btn{border-radius:24px;}
+.ts-root .ts-menu-btn{box-shadow:0 12px 26px -12px rgba(0,0,0,.5);}
+
+/* small phones (iPhone SE / 360px) */
+@media (max-width:360px){
+.ts-root .wrap{padding-left:12px;padding-right:12px;}
+.ts-root .counters{grid-template-columns:1fr;}
+.ts-root .ts-target-card{padding:18px 16px 16px;}
+.ts-root .logstats{grid-template-columns:repeat(2,1fr);}
+}
+/* large phones and tablets keep the single-column phone look, centred */
+@media (min-width:600px) and (max-width:1023px){
+.ts-root .wrap{max-width:560px;}
+}
+
+@media (prefers-reduced-motion:reduce){
+.ts-root .counter,.ts-root .stopband,.ts-root .newscard,.ts-root .logcard,
+.ts-root .ts-calcard,.ts-root .streak,.ts-root .ts-target-card{animation:none;}
+}
+
 `;
