@@ -3793,4 +3793,154 @@ animation:ts-rise .45s cubic-bezier(.2,.8,.3,1) both;
 .ts-root .ts-calcard,.ts-root .streak,.ts-root .ts-target-card{animation:none;}
 }
 
+/* =====================================================
+LIGHT v2 · BLUE PHONE UI  (palette + background)
+===================================================== */
+.ts-root[data-theme="light"]{
+--bg-grad:linear-gradient(180deg,#2c76ba 0%,#1f5a9f 32%,#174784 66%,#0f3163 100%);
+--surface:linear-gradient(160deg,rgba(255,255,255,.14),rgba(255,255,255,.06));
+--surface-2:rgba(255,255,255,.12);
+--border:rgba(255,255,255,.18);
+--text:#f3f8ff; --muted:rgba(214,230,252,.74);
+--amber:#5eb6ff; --amber-dim:rgba(94,182,255,.24);
+--accent-text:#a9dcff;
+--teal:#6df0b8; --teal-dim:rgba(109,240,184,.18);
+--rose:#ff9a8f; --rose-dim:rgba(255,154,143,.20);
+--warn:#ffc15a; --warn-dim:rgba(255,193,90,.20);
+--on-accent:#ffffff;
+--focus-ring:#8fd0ff;
+--orb-1:rgba(140,205,255,.45); --orb-2:rgba(60,140,235,.35); --orb-3:rgba(255,255,255,.10);
+--hero:linear-gradient(155deg,#3b8fd4 0%,#1f5fa6 48%,#123a73 100%);
+--hero-shadow:0 1px 0 rgba(255,255,255,.30) inset,0 30px 56px -24px rgba(4,20,56,.8);
+--hero-ink:#123a73;
+--btn:linear-gradient(180deg,#4aa8f5,#2a7bd1);
+--meter:linear-gradient(90deg,#3d9be8,#9bd8ff);
+--modal-bg:#14396e;
+--blur:blur(20px) saturate(140%);
+--shadow-card:0 1px 0 rgba(255,255,255,.16) inset,0 22px 44px -22px rgba(3,16,46,.7);
+--shadow-card-hover:0 1px 0 rgba(255,255,255,.22) inset,0 26px 50px -18px rgba(3,16,46,.8);
+--glow-amber:rgba(74,168,245,.45); --glow-rose:rgba(255,120,110,.35);
+--dock-bg:rgba(10,34,76,.92);
+--menu-bg:rgba(12,38,84,.97); --menu-hover:rgba(255,255,255,.08); --menu-sep:rgba(255,255,255,.14);
+--ck-bg:rgba(10,34,76,.88); --ck-border:rgba(160,210,255,.35); --ck-ink:#f3f8ff; --ck-dim:#b5cdee;
+--ck-track:rgba(255,255,255,.14);
+--ck-shadow:0 1px 0 rgba(255,255,255,.12) inset,0 14px 28px -14px rgba(2,12,36,.8),0 0 22px -8px rgba(74,168,245,.4);
+--ck-live:#6df0b8;
+}
+
+/* light blue glow top-right + soft diagonal sheen, like the phone screens */
+.ts-root[data-theme="light"]::before{
+background:
+linear-gradient(115deg,transparent 38%,rgba(255,255,255,.07) 50%,transparent 62%),
+radial-gradient(620px 420px at 92% 0%,var(--orb-1),transparent 70%),
+radial-gradient(760px 520px at 0% 100%,var(--orb-2),transparent 70%),
+radial-gradient(420px 320px at 8% 24%,var(--orb-3),transparent 70%);
+}
+/* replaces the old white bottom haze */
+.ts-root[data-theme="light"]::after{
+content:""; position:fixed; left:0; right:0; top:0; bottom:auto; height:420px; pointer-events:none; z-index:0;
+background:radial-gradient(560px 240px at 50% -60px,rgba(170,220,255,.28),transparent 70%);
+}
+
+/* text that sits directly on the blue page */
+.ts-root[data-theme="light"] .brand h1{color:#fff;}
+.ts-root[data-theme="light"] .ts-tk-time{color:#a9dcff;}
+.ts-root[data-theme="light"] .ts-tk-sep{color:#a9dcff;}
+
+/* =====================================================
+   LIGHT v2 · CARDS
+   ===================================================== */
+
+/* hero, stop band, counters = translucent navy glass */
+.ts-root[data-theme="light"] .counter:not(.goalcard){
+  background:linear-gradient(160deg,rgba(14,46,100,.62),rgba(10,34,78,.72));
+  border-color:rgba(255,255,255,.18);
+  box-shadow:0 1px 0 rgba(255,255,255,.16) inset,0 22px 44px -22px rgba(3,16,46,.7);
+}
+.ts-root[data-theme="light"] .stopband{
+  background:linear-gradient(160deg,rgba(255,255,255,.18),rgba(255,255,255,.07));
+  border-color:rgba(255,255,255,.22);
+  box-shadow:0 1px 0 rgba(255,255,255,.20) inset,0 20px 40px -22px rgba(3,16,46,.6);
+}
+.ts-root[data-theme="light"] .counter.over{border-color:#ff9a8f;}
+.ts-root[data-theme="light"] .ts-target-card{border-color:rgba(255,255,255,.34);}
+.ts-root[data-theme="light"] .ts-target-card::after{background:radial-gradient(420px 220px at 100% -10%,rgba(255,255,255,.30),transparent 65%);}
+.ts-root[data-theme="light"] .ts-target-fill{background:linear-gradient(90deg,#bfe4ff,#ffffff);}
+.ts-root[data-theme="light"] .ts-target-fill.met{background:#8dffc0;}
+.ts-root[data-theme="light"] .ts-target-fill.neg{background:#ffb0a8;}
+
+/* white rounded cards with navy text (like the food cards) */
+.ts-root[data-theme="light"] .goalcard,
+.ts-root[data-theme="light"] .newscard,
+.ts-root[data-theme="light"] .logcard,
+.ts-root[data-theme="light"] .ts-calcard,
+.ts-root[data-theme="light"] .daydetail,
+.ts-root[data-theme="light"] .streak,
+.ts-root[data-theme="light"] .block,
+.ts-root[data-theme="light"] .ts-glass{
+  --text:#0f2a52; --muted:#5f7396;
+  --surface-2:rgba(15,42,87,.07); --border:rgba(15,42,87,.12);
+  --amber:#2a7fd4; --amber-dim:rgba(42,127,212,.16);
+  --accent-text:#1d5aa0;
+  --teal:#0a8f55; --teal-dim:rgba(10,143,85,.13);
+  --rose:#d9423a; --rose-dim:rgba(217,66,58,.12);
+  --warn:#c77a10; --warn-dim:rgba(199,122,16,.15);
+  --meter:linear-gradient(90deg,#2a7bd1,#6fb8f5);
+  --modal-bg:#ffffff;
+  background:linear-gradient(180deg,#ffffff,#f1f6fd);
+  color:#0f2a52;
+  border-color:rgba(255,255,255,.85);
+  box-shadow:0 1px 0 #fff inset,0 22px 44px -24px rgba(3,16,46,.65);
+}
+.ts-root[data-theme="light"] .goalcard.hit{border-color:#0a8f55;box-shadow:0 1px 0 #fff inset,0 22px 44px -24px rgba(3,16,46,.6),0 0 0 2px rgba(10,143,85,.30);}
+.ts-root[data-theme="light"] .newscard .newsflag{background:rgba(217,66,58,.10);}
+.ts-root[data-theme="light"] .block.now{box-shadow:0 0 0 1.5px #2a7fd4 inset,0 14px 34px -14px rgba(42,127,212,.55);}
+.ts-root[data-theme="light"] .block.prep,
+.ts-root[data-theme="light"] .block.trade{box-shadow:inset 3px 0 0 #2a7fd4,0 18px 36px -22px rgba(3,16,46,.55);}
+.ts-root[data-theme="light"] .block.rest{box-shadow:inset 3px 0 0 #0a8f55,0 18px 36px -22px rgba(3,16,46,.55);}
+.ts-root[data-theme="light"] .block.stop{box-shadow:inset 3px 0 0 #d9423a,0 18px 36px -22px rgba(3,16,46,.55);}
+.ts-root[data-theme="light"] .streak .n{color:#2a7bd1;}
+
+/* trade chips on the navy counter */
+.ts-root[data-theme="light"] .chip.win{color:#6df0b8;border-color:rgba(109,240,184,.6);}
+.ts-root[data-theme="light"] .chip.loss{color:#ff9a8f;border-color:rgba(255,154,143,.6);}
+.ts-root[data-theme="light"] .chip.be{color:#ffc15a;border-color:rgba(255,193,90,.6);}
+
+/* =====================================================
+   LIGHT v2 · DOCK, MENU, POPUPS, FINISH
+   ===================================================== */
+
+/* navy dock, bright blue active tab */
+.ts-root[data-theme="light"] .ts-dock{
+  background:rgba(10,34,76,.92);
+  border-color:rgba(160,210,255,.20);
+  box-shadow:0 1px 0 rgba(255,255,255,.14) inset,0 24px 46px -16px rgba(2,12,36,.75);
+}
+.ts-root[data-theme="light"] .ts-dock-btn{color:#a9c4ea;}
+.ts-root[data-theme="light"] .ts-dock-btn:hover{color:#fff;}
+.ts-root[data-theme="light"] .ts-dock-btn.active{color:#fff;background:linear-gradient(180deg,#4aa8f5,#2a7bd1);box-shadow:0 8px 22px -8px rgba(74,168,245,.8);}
+
+/* menu */
+.ts-root[data-theme="light"] .ts-menu-btn{background:rgba(12,38,84,.97);border-color:rgba(160,210,255,.25);color:#fff;box-shadow:0 12px 26px -12px rgba(2,12,36,.7);}
+.ts-root[data-theme="light"] .ts-menu-panel{border-color:rgba(160,210,255,.22);}
+.ts-root[data-theme="light"] .ts-menu-item::before{background:#5eb6ff;}
+
+/* popups (news alert, goal popup, edit modal) = navy cards with white text */
+.ts-root[data-theme="light"] .ts-modal{
+  background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,0) 45%),#14396e;
+  border-color:rgba(160,210,255,.25);
+}
+.ts-root[data-theme="light"] .ts-goal.hit{border-color:#6df0b8;box-shadow:0 0 0 1px #6df0b8 inset,0 0 44px 4px rgba(109,240,184,.25);}
+.ts-root[data-theme="light"] .ts-goal.low .ts-goal-figure{color:#fff;}
+
+/* "back to now" pill and clock */
+.ts-root[data-theme="light"] .nowbtn{background:rgba(10,34,76,.92);border-color:rgba(160,210,255,.25);}
+
+/* calendar cells on the white card */
+.ts-root[data-theme="light"] .ts-cal-today:hover,
+.ts-root[data-theme="light"] .ts-cal-nav:hover{border-color:#2a7fd4;color:#0f2a52;}
+
+/* extra rounding to match the phone UI */
+.ts-root[data-theme="light"]{--r-card:30px;--r-input:16px;}
+
 `;
