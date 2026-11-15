@@ -361,30 +361,25 @@ function GoalPopup({ popup, onClose }) {
   if (!popup) return null;
   const hit = popup.kind === "hit";
   return (
-    <>
+    <div className="ts-modal-backdrop ts-goal-backdrop" onClick={onClose}>
       {hit && <Confetti />}
 
       <div
         className={`ts-modal ts-goal ${popup.kind}`}
         role="alertdialog"
         aria-modal="true"
+        aria-labelledby="ts-goal-title"
         onClick={(e) => e.stopPropagation()}
       >
-        {popup.emoji}
-
-        {popup.kicker}
-
-        {popup.title}
-
-        {popup.figure}
-
-        {popup.sub}
-
-        {popup.msg}
-
-        {hit ? "Let's go 🔥" : "Got it"}
+        <div className="ts-goal-icon" aria-hidden="true">{popup.emoji}</div>
+        <div className="ts-goal-kicker" id="ts-goal-title">{popup.kicker}</div>
+        <div className="ts-goal-title">{popup.title}</div>
+        <div className="ts-goal-figure">{popup.figure}</div>
+        <div className="ts-goal-sub">{popup.sub}</div>
+        <div className="ts-goal-msg">{popup.msg}</div>
+        <button type="button" className="ts-modal-btn primary ts-goal-btn" onClick={onClose}>{hit ? "Let's go 🔥" : "Got it"}</button>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -2169,7 +2164,9 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
           </div>
         </header>
 
-        <div className="ts-target-card">
+        <div className="ts-cols">
+          <div className="ts-col ts-col-main">
+            <div className="ts-target-card">
           <div className="ts-target-head">
             <span>Monthly target</span>
             {!editingTarget && (
@@ -2275,9 +2272,6 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
             </div>
             <div className="row">
               <div><span className="num">{day.pnl.length}</span></div>
-            </div>
-            <div className="row" style={{ marginTop: 10 }}>
-              <div><span className="num">{wins}{"\u2013"}{losses}{"\u2013"}{breakevens}</span></div>
             </div>
             {day.pnl.length > 0 && (
               <div className="pnl-trades">
@@ -2454,6 +2448,8 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
             </div>
           )}
         </div>
+        </div>
+        <div className="ts-col ts-col-side">
 
         <h2 className="section" id="ts-day">Right now<span className="sub">auto-updates as the day moves</span></h2>
         <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
@@ -2703,6 +2699,8 @@ export default function Session({ onOpenSummit, onOpenPerformance, onOpenNews, o
             <div className="n">{streak}</div>
             <div className="t">day streak stopping on time, without blowing the loss limit</div>
           </div>
+        </div>
+        </div>
         </div>
 
         <footer>
@@ -3146,14 +3144,11 @@ color:var(--text); font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;
 
 /* dark-only: premium obsidian & gold details */
 .ts-root:not([data-theme="light"])::after{
-  content:""; position:fixed; left:0; right:0; top:0; height:360px; pointer-events:none; z-index:0;
-  background-image:
-    radial-gradient(520px 200px at 50% -40px,rgba(232,201,122,.14),transparent 70%),
-    linear-gradient(rgba(190,205,255,.028) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(190,205,255,.028) 1px,transparent 1px);
-  background-size:100% 100%,34px 34px,34px 34px;
-  -webkit-mask-image:linear-gradient(180deg,#000 0%,transparent 100%);
-  mask-image:linear-gradient(180deg,#000 0%,transparent 100%);
+  content:""; position:fixed; left:0; right:0; top:0; height:480px; pointer-events:none; z-index:0;
+  background:
+    radial-gradient(600px 240px at 50% -70px,rgba(232,201,122,.15),transparent 70%),
+    radial-gradient(760px 300px at 88% -40px,rgba(64,104,255,.12),transparent 72%),
+    radial-gradient(520px 260px at 6% 0,rgba(150,170,255,.07),transparent 70%);
 }
 .ts-root:not([data-theme="light"]) .ts-target-card{border-color:rgba(232,201,122,.30);}
 .ts-root:not([data-theme="light"]) .ts-target-card::after{background:radial-gradient(420px 220px at 100% -10%,rgba(232,201,122,.22),transparent 65%);}
@@ -3546,5 +3541,47 @@ overflow:visible;
 .ts-root .ddt-shot{width:44px;height:44px;border-radius:10px;overflow:hidden;border:1px solid var(--border);background:var(--surface-2);padding:0;display:block;cursor:zoom-in;}
 .ts-root .ddt-shot img{display:block;width:100%;height:100%;object-fit:cover;}
 .ts-root .ddt-shot.ph{display:grid;place-items:center;color:var(--muted);font-size:12px;cursor:default;}
+
+/* goal popup icon circle (matches news alert) */
+.ts-root ~ * .ts-goal-icon,.ts-goal-icon{font-size:28px;}
+.ts-goal.hit .ts-goal-icon{background:var(--teal-dim);box-shadow:0 0 0 6px var(--teal-dim);}
+.ts-goal.half .ts-goal-icon{background:var(--warn-dim);box-shadow:0 0 0 6px var(--warn-dim);}
+.ts-goal.low .ts-goal-icon{background:var(--surface-2);box-shadow:0 0 0 6px var(--surface-2);}
+.ts-goal.red .ts-goal-icon{background:var(--rose-dim);box-shadow:0 0 0 6px var(--rose-dim);}
+
+/* ---------- DESKTOP LAYOUT ---------- */
+.ts-root .ts-cols{display:block;}
+
+@media (min-width:1024px){
+  .ts-root .wrap{max-width:1180px;padding:62px 32px 150px;}
+  .ts-root .ts-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:30px;align-items:start;}
+  .ts-root .ts-col{min-width:0;}
+  .ts-root .ts-col-main>.ts-target-card{margin-top:6px;}
+  .ts-root .ts-col-side>h2.section:first-child{margin-top:6px;}
+
+  /* header reads like a desktop top bar */
+  .ts-root header.top{padding:6px 0 10px;}
+  .ts-root .brand .brand-row h1{text-align:left;font-size:34px;}
+  .ts-root .clockbox .time{font-size:30px;}
+
+  /* floating menu lines up with the wider content edge */
+  .ts-root .ts-menu{left:max(32px,calc(50% - 558px));}
+
+  /* roomier cards and a bigger hero number */
+  .ts-root .ts-target-card{padding:26px 28px 22px;}
+  .ts-root .ts-target-current{font-size:52px;}
+  .ts-root .counter{padding:20px 22px;}
+  .ts-root .logcard,.ts-root .newscard,.ts-root .ts-calcard{padding:22px;}
+
+  /* subtle hover lift on cards */
+  .ts-root .counter,.ts-root .newscard,.ts-root .logcard,.ts-root .streak{transition:transform .2s ease,box-shadow .2s ease;}
+  .ts-root .counter:hover,.ts-root .newscard:hover,.ts-root .logcard:hover{transform:translateY(-2px);box-shadow:var(--shadow-card-hover);}
+
+  /* calendar day cells shorter so the card isn't huge in a wide column */
+  .ts-root .ts-calcard [style*="aspect-ratio"]{aspect-ratio:1.5 !important;}
+
+  /* keep the bottom dock and clock compact and centred */
+  .ts-root .ts-dock{width:min(calc(100% - 28px),520px);}
+}
 
 `;
